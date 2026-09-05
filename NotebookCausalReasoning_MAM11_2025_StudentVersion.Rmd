@@ -1,0 +1,494 @@
+---
+title: "Casual Inference Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+In this assignment we will exercise causal inference on the RHC (Right Heart Catheterization) dataset This dataset was used in Connors et al. (1996): The effectiveness of RHC in the initial care of critically ill patients. J American Medical Association 276:889-897. The dataset pertains to day 1 of hospitalization, i.e., the "treatment" variable swang1 is whether or not a patient received a RHC (also called the Swan-Ganz catheter) on the first day in which the patient qualified for a specific research study called SUPPORT.
+
+What should you submit? You need to submit:
+1. This Notebook (in .Rmd format) after filling in all your answers inside this notebook. You are required to do an action (write or fill-in code or write documentation) at the places marked by an arrow (=>). This arrow appears within the comments (and it will be preceeded by "#") or outside the comments in the text (without "#").
+2. The Notebook in html format with all the results.
+
+Please provide information about your group:
+==> Student names: 
+==> Student numbers:
+
+# Closed part (70% of the grade)
+
+## Understand the dataset:
+You can download the dataset from the course canvas. It is called "rhc.csv". Please Open https://hbiostat.org/data/repo/rhc.html and take a good look at the variables. Make sure you inspect the variables included in the dataset (they appear in a tabel below the text on the website). You can refer to the table whenever needed. 
+
+Packages: install packages if needed
+# ```{r}
+# install.packages("tableone")
+# install.packages("Matching")
+# # Recommended: add "dplyr" if you have used it before to make efficient preprocessing.
+# ```
+
+## Load packages
+```{r}
+library(tableone) # This library allows us to calculate summary statistics about the variables including the SMD (standardized mean difference).
+library(Matching) # This library will do the matching
+```
+
+## Read database
+```{r}
+# Download rhc dataset from CANVAS and read it
+rhc <- read.csv("rhc.csv")
+```
+
+
+## Understanding the dataset  
+Tip: Look at the data, use the "View" command on the dataset "rhc"
+```{r}
+print("===================================================")
+# => how many rows does rhc contain? write a print command
+# => What are the variable names? write a print command
+number_rows <- nrow(rhc)
+column_names <- names(rhc)
+sprintf("There are %d rows in the rhc dataframe.", number_rows)
+sprintf("The following are the column names in the rhc dataframe:")
+print(column_names)
+print("===================================================")
+```
+
+For the assignment the TREATMENT variable is swang1 and the OUTCOME variable is death.
+
+## Preprocess
+If you look at the values of the dichotomous variables you will see that they are factors (in other words, categorical variables). We would like to work with numeric variables in this exercise so we need to perform some conversions.
+
+Let's start with the treatment and outcome variables. Create an "outcome.died" and "swang.treatment" variables with the numeric values 0 and 1. Later we will deal with the rest.
+```{r}
+rhc$outcome.died <- as.numeric(rhc$death=='Yes')  # Again you might want, instead, to do all preprocessing with dplyr if you prefer
+rhc$treatment.swang <- as.numeric(rhc$swang1=='RHC')
+```
+
+### Check
+
+Let's take a quick look into the dataset using these variables
+```{r}
+print("===================================================")
+# TODO: discuss rounding here. 
+# => What is the mean of outcome.died in the whole data set?
+mean_outcome_died <- mean(rhc$outcome.died)
+sprintf("Mean of outcome.died in whole data set is: %.4f", mean_outcome_died)
+
+# => How many subjects are treated?
+num_treated <- sum(rhc$treatment.swang)
+sprintf("There are %d subjects treated.", num_treated)
+
+# =>  What is the mean mortality (outcome.died) in this treated group?
+mean_mortality_treated <- mean(rhc$outcome.died[rhc$treatment.swang == 1])
+sprintf("Mean mortality in treated group is: %.4f", mean_mortality_treated)
+
+# => How many subjects are not treated (i.e. in the control group)?
+num_not_treated <- sum(rhc$treatment.swang == 0)
+sprintf("There are %d subjects not treated.", num_not_treated)
+
+# => What is the mean mortality in this control group?
+mean_mortality_not_treated <- mean(rhc$outcome.died[rhc$treatment.swang == 0])
+sprintf("Mean mortality in not treated group is: %.4f", mean_mortality_not_treated)
+
+print("===================================================")
+```
+
+
+The variable cat1 is a factor (categorical variable) containing the primary disease category for the patient.
+```{r}
+# TODO: why does Hugo not need to convert to factor first?
+print("===================================================")
+# => How many different categories are in Cat1? Tip: use the levels() function on this variable.
+num_levels_cat1 <- length(levels(rhc$cat1))
+class <-class(rhc$cat1)
+sprintf("Cat1 is actually a %s class.", class)
+# Convert to factor:
+print("Converting to factor first, then counting number of different categories:")
+cat1_factor = as.factor(rhc$cat1)
+print("The different cat1 categories:")
+print(levels(cat1_factor))
+num_levels_cat1 <- length(levels(cat1_factor))
+sprintf("Cat1 has %d different categories.", num_levels_cat1)
+print("===================================================")
+```
+
+We would like to "translate" Cat1 into a set of variables each with the numeric values of 0/1. For example for the value of "ARF" we will create a variable "ARF" that will be 1 if rhc$cat1=='ARF'.
+
+```{r}
+rhc$ARF <- as.numeric(rhc$cat1=='ARF')
+print("===================================================")
+# => Do the same (as we did for ARF) also for all other values of cat1 but ignore the category "Missing".
+rhc$CHF             <- as.numeric(rhc$cat1 == 'CHF')
+rhc$Cirrhosis       <- as.numeric(rhc$cat1 == 'Cirrhosis')
+rhc$Colon.Cancer    <- as.numeric(rhc$cat1 == 'Colon Cancer')
+rhc$Coma            <- as.numeric(rhc$cat1 == 'Coma')
+rhc$COPD            <- as.numeric(rhc$cat1 == 'COPD')
+rhc$Lung.Cancer     <- as.numeric(rhc$cat1 == 'Lung Cancer')
+rhc$MOSF.Malignancy <- as.numeric(rhc$cat1 == 'MOSF w/Malignancy')
+rhc$MOSF.Sepsis     <- as.numeric(rhc$cat1 == 'MOSF w/Sepsis')
+ print("===================================================")
+```
+
+## Create data frame with variables of interest
+
+==> Create a data frame and call it rhc.small with the following variables of interest:
+All the underlying categories of "cat1" (ARF etc) that you created before,   "cardiohx", "chfhx", "dementhx", "psychhx",  "chrpulhx", "renalhx", "liverhx",  "gibledhx", "malighx",  "immunhx",  "transhx",  "amihx", "age", "sex", "edu", "das2d3pc", "aps1", "scoma1", "meanbp1", wblc1", "hrt1",     "resp1", "temp1", "pafi1", "alb1", "hema1", "bili1", "crea1", "sod1", "pot1",     "paco21", "ph1", "wtkilo1", "dnr1", "resp", "card", "neuro", "gastr",  "renal", "meta", "hema", "seps", "trauma",  "ortho", "adld3p", "urin1", "treatment.swang", "outcome.died".
+
+```{r}
+# rhc.small <- => Create this data frame
+rhc.small <- rhc[ , c("ARF", "CHF", "Cirrhosis", "Colon.Cancer", "Coma", "COPD",
+                      "Lung.Cancer", "MOSF.Malignancy", "MOSF.Sepsis",
+                      "cardiohx", "chfhx", "dementhx", "psychhx", "chrpulhx", "renalhx",
+                      "liverhx", "gibledhx", "malighx", "immunhx", "transhx", "amihx",
+                      "age", "sex", "edu", "das2d3pc",
+                      "aps1", "scoma1", "meanbp1", "wblc1", "hrt1", "resp1", "temp1", "pafi1",
+                      "alb1", "hema1", "bili1", "crea1", "sod1", "pot1", "paco21", "ph1", "wtkilo1",
+                      "dnr1", "resp", "card", "neuro", "gastr", "renal", "meta", "hema", "seps",
+                      "trauma", "ortho", "adld3p", "urin1",
+                      "treatment.swang", "outcome.died")]
+nrows <- nrow(rhc.small)
+ncols <- ncol(rhc.small)
+sprintf("rhc.small has %d rows and %d columns.", nrows, ncols)
+```
+
+Make sure you take a look at the definition of variables (on the URL given above) with unclear names to you. This data frame includes now all candidate variables from which we will select later for matching. However, before we jump into variable selection, let us continue data type conversion.
+
+Check classes of these variables by using the str command
+```{r}
+str(rhc.small)
+```
+
+If you have "labelled" variables like labelled "int" and labelled "num" it means that the dataset was imported from SPSS. In such a case, simply change such variables into numeric variables. If you do not see such variables then skip this step.
+
+```{r}
+#To our understanding this is not the case with us, thus we skip this step.
+
+#rhc.small$age <- as.numeric(rhc.small$age) # only if in your version of the data "age" was a "labelled" variable
+print("===================================================")
+# => Change all labelled variables that include numbers (integer or numeric) into numeric.
+# print("===================================================")
+```
+
+For each  categorical variable with 2 values (such as sex) change it into a numeric variable by selecting one of the values (such as "female") to be 1 and the other zero.
+
+```{r}
+rhc.small$female <- as.numeric(rhc.small$sex=='Female')
+print("===================================================")
+# => Change any factor with two values into a 0/1 variable by selecting a value (such as "female" above) to be 1 and the other value will be zero.
+rhc.small$dnr1   <- as.numeric(rhc.small$dnr1   == 'Yes')   
+rhc.small$resp   <- as.numeric(rhc.small$resp   == 'Yes')  
+rhc.small$card   <- as.numeric(rhc.small$card   == 'Yes')
+rhc.small$neuro  <- as.numeric(rhc.small$neuro  == 'Yes')
+rhc.small$gastr  <- as.numeric(rhc.small$gastr  == 'Yes')
+rhc.small$renal  <- as.numeric(rhc.small$renal  == 'Yes')
+rhc.small$meta   <- as.numeric(rhc.small$meta   == 'Yes') 
+rhc.small$hema   <- as.numeric(rhc.small$hema   == 'Yes')
+rhc.small$seps   <- as.numeric(rhc.small$seps   == 'Yes')
+rhc.small$trauma <- as.numeric(rhc.small$trauma == 'Yes')
+rhc.small$ortho  <- as.numeric(rhc.small$ortho  == 'Yes')
+
+rhc.small$sex <- NULL #removing sex since it wasnt replaced in-place, without this it messed up the matching later on
+
+#quick sanity check for whether all of the above worked
+print(names(rhc.small)[sapply(rhc.small, is.factor)])
+print("===================================================")
+```
+Before we start the analysis we need to be aware of the following issue: If you encounter a variable with missing values then you might run into a problem with the Match() function later on. For this exercise you can follow this advice:
+
+1) If the proportion of missing is above 15% for a variable then just exclude the whole variable from the data frame and hence from the analysis, it is likely that the information it had still resides in the combination of the many other variables.
+
+2) If you have less than 15% missing variables try to impute the values of the variable. In the extreme case you could apply multiple imputations and repeat the analysis on each imputation set and then pool the results. However for this exercise you can follow a simple strategy such as imputing the value with mean/median/mode. This would be a limitation but imputing missing values is not the focus of our exercise on causal inference.
+
+```{r}
+
+# => Inspect the proportion of missing values for each variable and follow the advice above.
+print("===================================================")
+
+#for every column (sapply) give True or False depending on whether it is na, then take the mean of that (treat True/False as 1/0)-> proportion of missing values for each variable.
+missing.fraction <- sapply(rhc.small, function(column) mean(is.na(column)))
+#print all variables that have missing values in descending order.
+print("Variables that have missing values, sorted by descending proportion of missing values:")
+print(sort(missing.fraction[missing.fraction > 0], decreasing = TRUE))
+
+#take names of all the variables where the fraction is above the threshold (0.15) and drop those columns from the dataframe (keep all others). This got rid of sdld3p and urin1 which were actually the only two vars with missing values (see earlier printed list above), so the following imputation is redundant, nonetheless:
+rhc.small <- rhc.small[ , !(names(rhc.small) %in% names(missing.fraction)[missing.fraction > 0.15])]
+for (v in names(missing.fraction)[missing.fraction > 0 & missing.fraction <= 0.15]) {
+  rhc.small[[v]][is.na(rhc.small[[v]])] <- median(rhc.small[[v]], na.rm = TRUE)
+} #loops over variables that have a missing value proportion between 0 and 0.15 (excluding the former, including the latter), and impute the missing values for those variables as the median of the present values of that variable.
+#TODO: explain why median chosen over mean/mode
+
+
+sprintf("There are %d missing values left in the rhc.small dataframe (should be 0)", sum(is.na(rhc.small)))
+print("Sanity check that dimensions of rhc.small dataframe did not change:")
+print(dim(rhc.small))
+
+#Note: watch out because re-running this cell wont show the two dropped vars, since they no longer exist, do "run all" to see that
+print("===================================================")
+```
+```{r}
+# Check/see that all variables are numeric or int
+str(rhc.small)
+```
+Now we are ready to start the analysis.
+
+## Selecting variables to control for
+
+According to the disjunctive cause criterion, we want to find variables (to control for) that are predictive of treatment and/or the outcome. In this assignment we will use the criterion to select all (pre-treatment) variables that are predictive of the outcome. This will include true confounders (that also affect the treatment, and risk factors that only affect the outcome). All our variables in rhc.small, except the outcome of course, are pre-treatment variables (none is measured AFTER the intervention) so they are all good candidates for the selection.
+
+The truth is that the best way to select these variables is to use clinical knowledge. However, in this assignment we will do this in a data-driven and practical way. Specifically, we will operationalize "predictive of the outcome" as the following criterion: a variable is predictive of the outcome if its univariate association with the outcome is significant at the 0.1 level. Because our outcome is binary we can translate this criterion to: For every candidate variable in rhc.small fit a logistic regression model to predict outcome (outcome.died) using only the candidate variable as a predictor and retain the variable if the p-value of its association with the outcome is ≤ 0.1, and otherwise discard the variable. Note: Do not include the treatment in the selection. 
+
+```{r}
+print("===================================================")
+# => Fit logistic regression models for each variable separately with the outcome and retain those with an association having a p-value of ≤ 0.1. Tip: you may want to automate the whole process!
+
+#Why 0.1 and not 0.05? It's mainly because variable screening should have looser requirements than hypothesis testing because missing a possible confounder is much more harmfull (potentially increased bias significantly), compared to the additional cost of controlling for a variable that isn't actually a confounder.
+
+#Make our candidates, but we first remove two variables the treatment and outcome, since checking if outcome affects outcome is pointless and we aren't experimenting on whether the treatment works, just looking for confounders, so ignoring those two:
+candidates <- setdiff(names(rhc.small), c("treatment.swang", "outcome.died"))
+
+p.values <- c()
+#v is our placeholder, we iterate over each variable, plug it into the glm, the "family = binomial" flag sets it to logistic regression. summary(model)$coefficients gives the coefficient estimate, z-value, std error, and p-value. Index into it to extract p-value for variable coefficient.
+for (v in candidates) {
+  model <- glm(as.formula(paste("outcome.died ~", v)), family = binomial, data = rhc.small)
+  p.values[v] <- summary(model)$coefficients[2, 4]
+}
+print(sort(p.values))
+
+
+# => Put the names of the selected variables (without the treatment and outcome variables) in the variable called xvars by writing xvars <- c("ARF", ...) or do it automatically!
+# => Print xvar
+
+#filter out the variables with p-value <= 0.1 and put into xvars
+xvars <- names(p.values)[p.values <= 0.1]
+
+print("Variables with p-value <= 0.1:")
+print(xvars)
+sprintf("Number of fariables with p-value <= 0.1: %d", length(xvars))
+
+
+# => Put these selected variables in a data.frame called rhc.selected that also includes the treatment and outcome variables to this data frame.
+rhc.selected <- rhc.small[ , c(xvars, "treatment.swang", "outcome.died")] #Put everything back into the dataframe 
+print("Dimensions of new dataframe with just selected variables:")
+print(dim(rhc.selected))
+# print("===================================================")
+```
+
+
+## Inspect balance before matching
+
+## look at "table 1"
+```{r}
+print("===================================================")
+#=> look at "table 1", complete the command by filling in the "..."
+# CreateTableOne's strata argument tells it: "compute all these variable summaries (mean and stdev) separately for each level of this grouping variable (treatment vs no treatment), then line them up side by side (plus the SMD between them)
+table1<- CreateTableOne(vars=xvars,strata="treatment.swang", data=rhc.selected, test=FALSE)
+## include standardized mean difference (SMD)
+print(table1, smd=TRUE)
+## For which variables we do not have a good balance? Look at the slides for a guideline. 
+# Expect to see several variables with high SMD score since the patients who got RHC and those who didn't were not randomized, so they likely differ on covariates like illnes, age, comborbidities etc. Here we quantify that: for each variable, is the distribution similar between the treated and not treated group? Then, after matching we can do this analysis again and see if it fixed some/all of the imbalances between groups, so that now the treatment does appear to be randomized across each covariate. 
+
+# Following the slides:
+smd_values = ExtractSmd(table1)
+adequate_balance <- rownames(smd_values)[smd_values < 0.1]
+not_too_alarming <- rownames(smd_values)[smd_values >= 0.1 & smd_values < 0.2]
+imbalanced <- rownames(smd_values)[smd_values > 0.2]
+
+sprintf("The following variables are adequately balanced between treatment and no treatment:")
+print(adequate_balance)
+
+sprintf("The following variables are decently balanced between treatment and no treatment (on the border but not too alarming):")
+print(not_too_alarming)
+
+sprintf("The following variables are too imbalanced between treatment and no treatment:")
+print(imbalanced)
+print("===================================================")
+```
+
+
+## Greedy matching on Mahalanobis distance
+Let us now do matching in the hope that the balance will get better so we can have a more valid inference.
+
+```{r}
+print("===================================================")
+# We want to match the treated with the untreated subjects. Find 1 on 1 match.
+# # => Complete the command
+greedymatch <- Match(Tr=...,M=, X=rhc.selected[xvars], replace=FALSE) 
+# read the documentation for Match() by typing ?Match.
+# => What does replace=FALSE mean?
+# => What is inside X in the command above?
+# print("===================================================")
+```
+
+```{r}
+print("===================================================")
+greedymatch$index.treated # => What do you think this is?
+greedymatch$index.control # => What do you think this is?
+print("===================================================")
+```
+
+
+=> Are all treated subjects matched to a control one?
+
+```{r}
+matched <- rhc.selected[unlist(greedymatch[c("index.treated","index.control")]), ]
+matched[1,]  # This is the first treated subject
+print("===================================================")
+matched[length(greedymatch$index.treated)+1,] # => What do you think this subject is?
+print("===================================================")
+```
+
+
+Get table 1 for matched data with standardized differences
+```{r}
+print("===================================================")
+matchedtab1 <-  # => Complete the command to create table 1 after matching
+# => Print the balance with smd. 
+# => After matching how many "bad" variables with SMD > 0.2 are there?
+# print("===================================================")
+```
+
+## Outcome analysis
+```{r}
+print("===================================================")
+y_trt <- # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+y_con <- # Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+print("===================================================")
+```
+
+## Let's do a paired t-test to see if there are differences in death between the matched groups. This is not the best test because the data is binary but we want to just get a feeling of the differences.
+
+```{r}
+diffy <- y_trt-y_con # pairwise difference
+t.test(diffy)
+```
+
+=> Look at the p-value. Is it below 0.05?
+=> What does this mean?
+
+## We want to use the McNemar test, which is the best choice for paired (matched) binary data
+```{r}
+table(y_trt,y_con)
+# In this table you will see the 2x2 table:  
+#         y_con
+# ytreat     0     1
+#       0    a     b
+#       1    c     d
+
+# Enter these a, b, c, and d numbers in the following McNemar test
+# print("===================================================")
+mcnemar.test(matrix(c(...),2,2)) # => Complete the command by filling the a, b, c, and d numbers in the correct order.
+# => Is the p-value less than 0.05? What does this result mean?
+# print("===================================================")
+```
+
+## The last way we want to analyse the outcome is with logistic regression
+```{r}
+gmodel1 <- glm(died ~ treatment, family=binomial, data=matched)
+print("===================================================")
+# => Is the coefficient of treatment significant? you can use summary(gmodel1) or confint(gmodel1)
+# =>  What is the odds ratio that is associated with treatment? You can easily derive it from the coefficient (Google otherwise how to get the odds ratio from the coefficient)
+# =>  If the coefficient is positive, what does that mean in terms of odds ratio?
+# => If the coefficient is negative, what does that mean in terms of odds ratio?
+
+# The great thing about modelling is that we can now again adjust for the variables with the worst SMD. This is called doubly-robust estimation. Adjust for the variable with the worst SMD that you encountered before. To adjust you just add the name of the variable in the logistic regression formula. => Complete the command
+gmodel2 <- glm(died ~ treatment + ..., family=binomial, data=matched)
+
+# => What is the odds ratio for treatment now?
+# print("===================================================")
+```
+
+
+## Propensity score matching
+
+Fit a propensity score model to predict treatment (not the outcome!). Use logistic regression with glm
+```{r}
+print("===================================================")
+psmodel <-  # => Use the variables we found before in xvars in the first assignment to predict treatment
+print("===================================================")
+summary(psmodel)   # show coefficients etc
+pscore<-psmodel$fitted.values # create propensity score
+```
+
+# Now it is time to check the positivity assumption
+# let's check the overlap between the propensity scores for the two groups. We do that before the matching.
+```{r}
+print("===================================================")
+#  => plot the density of the propensity scores of the treated and untreated. Tip: you might want to use par(mfrow=c(2,1)) to create 2 panels (2 rows, 1 column) and then plotting the first hist (histogram), with say, ylim=c(0,650) and col='darkblue', and the second histogram with ylim=c(650, 0) (note that we flipped the order) and col='darkblue'. This will plot the blue histogram as a normal histogram and the red one will be plotted upside down underneath the blue one so you can easily see the overlap.
+# => What do you think about the overlap? 
+print("===================================================")
+```
+
+We want to do greedy matching on PS using Match with a caliper. Note that instead of the probability PS itself, we usually use the log odds (logit) of PS which is log(PS/(1-PS)) which is also equal to log(PS)-log(1-PS) . So let us first write a function (of one line) to calculate the logit.
+
+```{r}
+print("===================================================")
+logit <- function(p) {...} # => Complete this function to calculate the log odds
+print("===================================================")
+```
+
+
+Now we want to use Match() with rhc.selected$treatment.swang as treatement, with 1 matched control per treated subject, with X as the logit(pscore), with no replacement and with a caliper of 0.2
+
+```{r}
+print("===================================================")
+psmatch <- Match(Tr=mydata$treatment,...) # => complete the command
+print("===================================================")
+matched <- mydata[unlist(psmatch[c("index.treated","index.control")]), ]
+```
+
+
+## Get standardized differences. Note: xvars is the same as in the first assignment.
+
+```{r}
+print("===================================================")
+matchedtab1 <- CreateTableOne(vars=xvars, strata ="...", 
+                            data=matched, test = FALSE) # => Complete the command
+# => print the matching table showing the SMD
+# => Are there any variables with bad balance now?
+print("===================================================")
+```
+
+## Outcome analysis after propensity score matching
+```{r}
+print("===================================================")
+y_trt.ps <- # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+y_con.ps <- # Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+print("===================================================")
+```
+
+
+Perform a t-test
+```{r}
+# Perform paired t-test. Just to get a feeling of the result
+diffy.ps <- y_trt.ps - y_con.ps # pairwise difference
+t.test(diffy.ps)
+print("===================================================")
+# => Is the test significant?
+print("===================================================")
+```
+
+
+Use the McNemar test as before. Enter the a, b, c, and d numbers you get from the 2x2 table in the McNemar test
+```{r}
+print("===================================================")
+mcnemar.test(matrix(c(...),2,2)) # => Complete the command
+# => Is the p-value less than 0.05? What does this result mean?
+# => Compare the difference in the means before and after matching.
+print("===================================================")
+```
+
+Use logistic regression
+```{r}
+gmodel3 <- glm(died ~ treatment, family="binomial", data = matched)
+print("===================================================")
+# => What is the odds ratio of treatment?
+# => Now correct also for the least well balanced variable
+gmodel3 <- glm(died ~ treatment + ..., family="binomial", data = matched)
+# => What is the odds ratio of treatment now?
+print("===================================================")
+```
+
+
+# Open part (30% of the grade)
+Instead of the glm to calculate the propensity score use any machine learning technique you like such as a regression tree (using rpart), or random forests (randomForest) or neural networks (neuralnet) or another formalism in R to create the propensity score model and to predict the probabilities on such a model. Note that you might need to tweak the model parameters in order to improve it. Compare your results to those you obtained by matching (via the Mahalanobis distance and the propensity score with logistic regression). Which approach do you prefer, and why?
