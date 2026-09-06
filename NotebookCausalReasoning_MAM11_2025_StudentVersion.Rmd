@@ -39,7 +39,6 @@ library(Matching) # This library will do the matching
 rhc <- read.csv("rhc.csv")
 ```
 
-
 ## Understanding the dataset  
 Tip: Look at the data, use the "View" command on the dataset "rhc"
 ```{r}
@@ -311,6 +310,11 @@ Let us now do matching in the hope that the balance will get better so we can ha
 
 ```{r}
 print("===================================================")
+
+#Match() function has to randomly chose between equal best matches when replacement = False. Thus, set seed for reproducibility of results.
+set.seed(42)
+
+
 # We want to match the treated with the untreated subjects. Find 1 on 1 match.
 # # => Complete the command
 #greedymatch <- Match(Tr=,M=, X=rhc.selected[xvars], replace=FALSE) 
@@ -501,6 +505,9 @@ Now we want to use Match() with rhc.selected$treatment.swang as treatement, with
 
 ```{r}
 print("===================================================")
+#Match() function has to randomly chose between equal best matches when replacement = False. Note that this is much more likely here than before since now we are only matching on 1 variable (propensity) rather than all the variables in xvars. Thus, set seed for reproducibility of results.
+set.seed(42)
+
 # Compute all logits
 logits <- sapply(pscore, logit)
 
@@ -602,9 +609,9 @@ gmodel3 <- glm(outcome.died ~ treatment.swang, family=binomial, data=matched_ps)
 print("===================================================")
 # => What is the odds ratio of treatment?
 summary(gmodel3)
-# In summary(gmodel3) we can see that the p-value for treatment is 1.12e-05, indicating that the coefficient of treatment is significant. 
+# In summary(gmodel3) we can see that the p-value for treatment is 0.000189, indicating that the coefficient of treatment is significant. 
 sprintf("Coefficient of treatment is: %.5f.", coef(gmodel3)["treatment.swang"])
-# The estimated treatment coefficient is 0.31278, thus the odds ratio associated with treatment is exp(0.24958) = 1.3672. This means that the odds of death increase by a factor of 1.3672 in the treatment group compared to the no treatment group.
+# The estimated treatment coefficient is 0.26655, thus the odds ratio associated with treatment is exp(0.26655) = 1.3055. This means that the odds of death increase by a factor of 1.3055 in the treatment group compared to the no treatment group.
 
 
 # => Now correct also for the least well balanced variable
@@ -612,9 +619,9 @@ sprintf("Coefficient of treatment is: %.5f.", coef(gmodel3)["treatment.swang"])
 gmodel4 <- glm(outcome.died ~ treatment.swang + scoma1, family=binomial, data=matched_ps)
 # => What is the odds ratio of treatment now?
 summary(gmodel4)
-# In summary(gmodel4) we can see that the p-value for treatment is 7.91e-06, indicating that the coefficient of treatment is still significant (<0.05). 
+# In summary(gmodel4) we can see that the p-value for treatment is 0.000163, indicating that the coefficient of treatment is still significant (<0.05). 
 sprintf("Coefficient of treatment is: %.5f.", coef(gmodel4)["treatment.swang"])
-# The estimated treatment coefficient is 0.320552 , thus the odds ratio associated with treatment is exp(0.320552 ) = 1.3779 This means that the odds of death increase by a factor of 1.3779 in the treatment group compared to the no treatment group. Notably, this is a slightly larger odds ratio than before adjusting for scoma1, highlighting the fact that even the variable with the highest SMD value was still not significantly confounding the results of gmodel3.
+# The estimated treatment coefficient is 0.27114, thus the odds ratio associated with treatment is exp(0.27114) = 1.3115 This means that the odds of death increase by a factor of 1.3115 in the treatment group compared to the no treatment group. Notably, this is a slightly larger odds ratio than before adjusting for scoma1, highlighting the fact that even the variable with the highest SMD value was still not significantly confounding the results of gmodel3.
 
 print("===================================================")
 ```
