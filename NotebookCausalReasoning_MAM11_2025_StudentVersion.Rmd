@@ -547,8 +547,8 @@ print("===================================================")
 ## Outcome analysis after propensity score matching
 ```{r}
 print("===================================================")
-y_trt.ps <- matched_ps$outcome.died[matched$treatment.swang == 1] # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
-y_con.ps <- matched_ps$outcome.died[matched$treatment.swang == 0]# Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+y_trt.ps <- matched_ps$outcome.died[matched_ps$treatment.swang == 1] # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+y_con.ps <- matched_ps$outcome.died[matched_ps$treatment.swang == 0]# Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
 print("===================================================")
 ```
 
@@ -560,8 +560,8 @@ diffy.ps <- y_trt.ps - y_con.ps # pairwise difference
 t.test(diffy.ps)
 print("===================================================")
 # => Is the test significant?
-#Yes, the p-value = 0.002966, so below 0.05. 
-# This means the mean difference in outcome (death) between treated and not treated groups (0.0569) is significantly different from 0. In other words, RHC patients-treated patients had significantly higher death rates than their matched controls. Note however that a t-test isn't ideal here since the binary data violates the normality assumption of a t-test.
+#Yes, the p-value = 9.767e-06, so well below 0.05. 
+# This means the mean difference in outcome (death) between treated and not treated groups (0.07151096) is significantly different from 0. In other words, RHC patients-treated patients had significantly higher death rates than their matched controls. Note however that a t-test isn't ideal here since the binary data violates the normality assumption of a t-test.
 print("===================================================")
 ```
 
@@ -585,13 +585,13 @@ table(y_trt.ps,y_con.ps)
 
 mcnemar.test(table(y_trt.ps,y_con.ps))
 # => Is the p-value less than 0.05? What does this result mean?
-#Yes, the p-value is 0.00342, less than 0.05. This means the discordant pairs (b and c, where the outcome of treated and control disagreed) are imbalance, i.e., treatment status is associated with chance of death within matched pairs (evidence of treatment effect). Here, since c=339 is statistically significantly greater than b=266, there seems to be evidence that there is a higher chance of death among the treated patients within matched pairs, which is consistent with the t-test above.
+#Yes, the p-value is 1.208e-05, a lot less than 0.05. This means the discordant pairs (b and c, where the outcome of treated and control disagreed) are imbalance, i.e., treatment status is associated with chance of death within matched pairs (evidence of treatment effect). Here, since c=457 is statistically significantly greater than b=333, there seems to be evidence that there is a higher chance of death among the treated patients within matched pairs, which is consistent with the t-test above.
 # => Compare the difference in the means before and after matching.
 #TODO: mean doesn't come out of mcnemar test right, or am i missing something?
-# Difference in means y_treat - y_con after matching on propensity is 0.05685358 (see t-test right above).
+# Difference in means y_treat - y_con after matching on propensity is 0.07151096  (see t-test right above).
 # Difference in means y_treat - y_con after matching on covariates is 0.09111722  (see first t-test).
 # Difference in means y_treat - y_con before matching is 0.6804 - 0.6297 (from original descriptive data analysis at the top) = 0.0507. 
-# Since propensity matching achieved better covariate balance (lower SMDs), it more successfully removed confounding on the measured covariates, so it's the more trustworthy estimate of the two. That the raw difference in means estimate happens to resemble the propensity-matched estimate is likely coincidental sample-specific behavior, and not proof that confounding was absent. The SMD tables tell us that propensity matching demonstrably balanced the covariates better, which is why its estimate deserves more trust. The Mahalanobis number is more likely an artifact of incomplete balancing (and/or a different matched subsample) than a genuine midpoint in some meaningful confounding-removal trajectory. Anyways, the difference in means after balancing the matches well in the propensity-based approach, indicate that after adjusting for those possible confounders, there is still a difference in means between the treated and not treated groups, which is in line with the significance found in the t-test, mcnemar test and logistic regression below.
+# Since propensity matching achieved better covariate balance (lower SMDs), it more successfully removed confounding on the measured covariates, so it's the more trustworthy estimate of the two. That the raw difference in means estimate happens to resemble the propensity-matched estimate is likely coincidental sample-specific behavior, and not proof that confounding was absent. The SMD tables tell us that propensity matching demonstrably balanced the covariates better, which is why its estimate deserves more trust. The Mahalanobis number being even slightly higher is more likely an artifact of incomplete balancing (and/or a different matched subsample) than a genuine midpoint in some meaningful confounding-removal trajectory. Anyways, the difference in means after balancing the matches well in the propensity-based approach, indicate that after adjusting for those possible confounders, there is still a difference in means between the treated and not treated groups, which is in line with the significance found in the t-test, McNemar test and logistic regression below.
 
 print("===================================================")
 ```
@@ -602,9 +602,9 @@ gmodel3 <- glm(outcome.died ~ treatment.swang, family=binomial, data=matched_ps)
 print("===================================================")
 # => What is the odds ratio of treatment?
 summary(gmodel3)
-# In summary(gmodel3) we can see that the p-value for treatment is 0.000481, indicating that the coefficient of treatment is significant. 
+# In summary(gmodel3) we can see that the p-value for treatment is 1.12e-05, indicating that the coefficient of treatment is significant. 
 sprintf("Coefficient of treatment is: %.5f.", coef(gmodel3)["treatment.swang"])
-# The estimated treatment coefficient is 0.24958, thus the odds ratio associated with treatment is exp(0.24958) = 1.2835. This means that the odds of death increase by a factor of 1.2835 in the treatment group compared to the no treatment group.
+# The estimated treatment coefficient is 0.31278, thus the odds ratio associated with treatment is exp(0.24958) = 1.3672. This means that the odds of death increase by a factor of 1.3672 in the treatment group compared to the no treatment group.
 
 
 # => Now correct also for the least well balanced variable
@@ -612,9 +612,9 @@ sprintf("Coefficient of treatment is: %.5f.", coef(gmodel3)["treatment.swang"])
 gmodel4 <- glm(outcome.died ~ treatment.swang + scoma1, family=binomial, data=matched_ps)
 # => What is the odds ratio of treatment now?
 summary(gmodel4)
-# In summary(gmodel4) we can see that the p-value for treatment is 0.000279, indicating that the coefficient of treatment is still significant (<0.05). 
+# In summary(gmodel4) we can see that the p-value for treatment is 7.91e-06, indicating that the coefficient of treatment is still significant (<0.05). 
 sprintf("Coefficient of treatment is: %.5f.", coef(gmodel4)["treatment.swang"])
-# The estimated treatment coefficient is 0.261863, thus the odds ratio associated with treatment is exp(0.261863) = 1.2993 This means that the odds of death increase by a factor of 1.2993 in the treatment group compared to the no treatment group. Notably, this is a considerably smaller odds ratio than before adjusting for scoma1.
+# The estimated treatment coefficient is 0.320552 , thus the odds ratio associated with treatment is exp(0.320552 ) = 1.3779 This means that the odds of death increase by a factor of 1.3779 in the treatment group compared to the no treatment group. Notably, this is a slightly larger odds ratio than before adjusting for scoma1, highlighting the fact that even the variable with the highest SMD value was still not significantly confounding the results of gmodel3.
 
 print("===================================================")
 ```
