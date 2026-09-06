@@ -281,7 +281,7 @@ print(dim(rhc.selected))
 ```{r}
 print("===================================================")
 #=> look at "table 1", complete the command by filling in the "..."
-# CreateTableOne's strata argument tells it: "compute all these variable summaries (mean and stdev) separately for each level of this grouping variable (treatment vs no treatment), then line them up side by side (plus the SMD between them)
+# CreateTableOne's strata argument tells it: "compute all these variable summaries (mean and stdev) separately for each level of this strata/grouping variable (treatment vs no treatment), then line them up side by side (plus the SMD between them). test=False ensures to ignore p-values since we want SMD and not significance tests that are sensitive to sample size, as discussed in the slides.
 table1<- CreateTableOne(vars=xvars,strata="treatment.swang", data=rhc.selected, test=FALSE)
 ## include standardized mean difference (SMD)
 print(table1, smd=TRUE)
@@ -294,13 +294,13 @@ adequate_balance <- rownames(smd_values)[smd_values < 0.1]
 not_too_alarming <- rownames(smd_values)[smd_values >= 0.1 & smd_values < 0.2]
 imbalanced <- rownames(smd_values)[smd_values > 0.2]
 
-sprintf("The following variables are adequately balanced between treatment and no treatment:")
+sprintf("The following %d variables are adequately balanced between treatment and no treatment:", length(adequate_balance))
 print(adequate_balance)
 
-sprintf("The following variables are decently balanced between treatment and no treatment (on the border but not too alarming):")
+sprintf("The following %d variables are decently balanced between treatment and no treatment (on the border but not too alarming):", length(not_too_alarming))
 print(not_too_alarming)
 
-sprintf("The following variables are too imbalanced between treatment and no treatment:")
+sprintf("The following %d variables are too imbalanced between treatment and no treatment:", length(imbalanced))
 print(imbalanced)
 print("===================================================")
 ```
@@ -313,17 +313,23 @@ Let us now do matching in the hope that the balance will get better so we can ha
 print("===================================================")
 # We want to match the treated with the untreated subjects. Find 1 on 1 match.
 # # => Complete the command
-greedymatch <- Match(Tr=...,M=, X=rhc.selected[xvars], replace=FALSE) 
+#greedymatch <- Match(Tr=,M=, X=rhc.selected[xvars], replace=FALSE) 
 # read the documentation for Match() by typing ?Match.
 # => What does replace=FALSE mean?
 # => What is inside X in the command above?
-# print("===================================================")
+
+# Tr is a vector indicating for each observation whether it belongs to the treatment or not treated group, M determines how many control instances we match to each treatment instance (here 1:1 matching) and X is a matrix (therefore added as.matrix, per the documentation) with all the variables (covariates) to match on (calculate the Magalanobis distance with). replace = False means matching without replacement, i.e. once an untreated subject has been used (matched), it can't be matched again against another treated subject. This forces each matched control to be unique, so the order of matching matters, and thus this typically increases bias relative to matching with replacement. If we match with replacement, the same "good" control can be matched against multiple treated subjects, which gives closer matches on average (lower bias), but increases variances, highlighting the inherent bias-variance tradeoff. Lastly, Weight = 2 specifies to use the true Mahalanobis distance as distance metric for matching, including covariance correction (to ensure to not double penalize difference along two correlated dimensions as if they were independent), rather than only standardizing by variance which is what the default inverse-variance-weighting does.
+greedymatch <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = as.matrix(rhc.selected[xvars]), 
+                      replace = FALSE, Weight = 2)
+
+print("===================================================")
 ```
 
 ```{r}
 print("===================================================")
 greedymatch$index.treated # => What do you think this is?
 greedymatch$index.control # => What do you think this is?
+# greedymatch$index.treated is a vector containing for all treated observation in the matched dataset, theit observation (index/row) numbers in the original dataset (rhc.selected). greedymatch$index.control contains the same indices, but then for the control subjects in the matched dataset (those selected during matching). Notably, index.treated[i] and index.control[i] together identify the i-th matched pair: row index.treated[i] is a treated subject, and row index.control[i] is the untreated subject matched to them. So this means that these two vectors let you reconstruct exactly which original rows ended up in the matched dataset, and how they're paired together, e.g., rhc.selected[greedymatch$index.treated[1],] and rhc.selected[greedymatch$index.control[1], ] give you the first matched pair. Lastly, note that since M=1 and replace=FALSE, index.control should contain just as many values as index.treated and no repeated values (each control used at most once), while each treated subject is matched since no caliper was specified.
 print("===================================================")
 ```
 
@@ -335,6 +341,7 @@ matched <- rhc.selected[unlist(greedymatch[c("index.treated","index.control")]),
 matched[1,]  # This is the first treated subject
 print("===================================================")
 matched[length(greedymatch$index.treated)+1,] # => What do you think this subject is?
+# Because unlist(greedymatch[c("index.treated","index.control")]) concatenates all of index.treated first, then all of index.control, the resulting matched dataframe contains in rows 1 to length(index.treated) → all the treated subjects in matching order, and in rows length(index.treated)+1 to 2×length(index.treated) (since 1:1 matching) all the matched controls, in the same order as their treated counterparts. Therefore, matched[length(greedymatch$index.treated)+1,] is the control subject matched to the first treated subject (the one printed just above here).
 print("===================================================")
 ```
 
@@ -342,17 +349,45 @@ print("===================================================")
 Get table 1 for matched data with standardized differences
 ```{r}
 print("===================================================")
-matchedtab1 <-  # => Complete the command to create table 1 after matching
+# CreateTableOne's strata argument tells it: "compute all these variable summaries (mean and stdev) separately for each level of this strata/grouping variable (treatment vs no treatment), then line them up side by side (plus the SMD between them). test=False ensures to ignore p-values since we want SMD and not significance tests that are sensitive to sample size, as discussed in the slides.
+matchedtab1 <- CreateTableOne(vars=xvars,strata="treatment.swang", data=matched, test=FALSE) # => Complete the command to create table 1 after matching
 # => Print the balance with smd. 
+print(matchedtab1, smd=TRUE)
+
+  
+# Expect to see less variables with high SMD scores after matching. 
+
+# Following the slides:
+smd_values_matched = ExtractSmd(matchedtab1)
+adequate_balance_matched <- rownames(smd_values_matched)[smd_values_matched < 0.1]
+not_too_alarming_matched <- rownames(smd_values_matched)[smd_values_matched >= 0.1 & smd_values_matched < 0.2]
+imbalanced_matched <- rownames(smd_values_matched)[smd_values_matched > 0.2]
+
+sprintf("The following %d variables are adequately balanced between treatment and no treatment:", length(adequate_balance_matched))
+print(adequate_balance_matched)
+
+sprintf("The following %d variables are decently balanced between treatment and no treatment (on the border but not too alarming):", length(not_too_alarming_matched))
+print(not_too_alarming_matched)
+
+sprintf("The following %d variables are too imbalanced between treatment and no treatment:", length(imbalanced_matched))
+print(imbalanced_matched)
+
 # => After matching how many "bad" variables with SMD > 0.2 are there?
+print("After matching there are 7 bad variables with SMD > 0.2, compared to 12 before matching.")
+
+
 # print("===================================================")
 ```
 
 ## Outcome analysis
 ```{r}
 print("===================================================")
-y_trt <- # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
-y_con <- # Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+#n <- length(greedymatch$index.treated) #n = number of treated and control subjects in matched
+#y_trt <- matched$outcome.died[1:n]# => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+#y_con <- matched$outcome.died[(n+1):(2*n)]# Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+
+y_trt <-matched$outcome.died[matched$treatment.swang == 1]# => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+y_con <- matched$outcome.died[matched$treatment.swang == 0]# Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
 print("===================================================")
 ```
 
@@ -364,7 +399,9 @@ t.test(diffy)
 ```
 
 => Look at the p-value. Is it below 0.05?
+Yes, the p-value = 1.453e-11, so far below 0.05. 
 => What does this mean?
+This means the mean difference in outcome (death) between treated and not treated groups (0.0911) is significantly different from 0. In other words, RHC patients-treated patients had significantly higher death rates than their matched controls. Note however that a t-test isn't ideal here since the binary data violates the normality assumption of a t-test.
 
 ## We want to use the McNemar test, which is the best choice for paired (matched) binary data
 ```{r}
@@ -377,24 +414,39 @@ table(y_trt,y_con)
 
 # Enter these a, b, c, and d numbers in the following McNemar test
 # print("===================================================")
-mcnemar.test(matrix(c(...),2,2)) # => Complete the command by filling the a, b, c, and d numbers in the correct order.
+#mcnemar.test(matrix(c(),2,2)) # => Complete the command by filling the a, b, c, and d numbers in the correct order.
+mcnemar.test(table(y_trt,y_con))
 # => Is the p-value less than 0.05? What does this result mean?
+#Yes, the p-value is 2.294e-11, much less than 0.05. This means the discordant pairs (b and c, where the outcome of treated and control disagreed) are imbalance, i.e., treatment status is associated with chance of death within matched pairs (evidence of treatment effect). Here, since c=538 is statistically significantly greater than b=339, there seems to be evidence that there is a higher chance of death among the treated patients within matched pairs, which is consistent with the t-test above.
 # print("===================================================")
 ```
 
 ## The last way we want to analyse the outcome is with logistic regression
 ```{r}
-gmodel1 <- glm(died ~ treatment, family=binomial, data=matched)
+gmodel1 <- glm(outcome.died ~ treatment.swang, family=binomial, data=matched)
 print("===================================================")
 # => Is the coefficient of treatment significant? you can use summary(gmodel1) or confint(gmodel1)
+summary(gmodel1)
+# In summary(gmodel1) we can see that the p-value for treatment is 4.34e-10, indicating that the coefficient of treatment is significant. 
+
 # =>  What is the odds ratio that is associated with treatment? You can easily derive it from the coefficient (Google otherwise how to get the odds ratio from the coefficient)
+sprintf("Coefficient of treatment is: %.5f.", coef(gmodel1)["treatment.swang"])
+# The estimated treatment coefficient is 0.39461, thus the odds ratio associated with treatment is exp(0.39461) = 1.4838. This means that the odds of death increase by a factor of 1.4838 in the treatment group compared to the no treatment group.
+
 # =>  If the coefficient is positive, what does that mean in terms of odds ratio?
+# As explained above, if the coefficient is positive the odds ratio (exp(coefficient)) will be > 1, meaning that the treatment group has a higher chance of death compared to the not treated group.
+
 # => If the coefficient is negative, what does that mean in terms of odds ratio?
+# Meanwhile, if the coefficient is negative the odds ratio (exp(coefficient)) will be < 1, meaning that the treatment group has a lower chance of death compared to the not treated group.
 
 # The great thing about modelling is that we can now again adjust for the variables with the worst SMD. This is called doubly-robust estimation. Adjust for the variable with the worst SMD that you encountered before. To adjust you just add the name of the variable in the logistic regression formula. => Complete the command
-gmodel2 <- glm(died ~ treatment + ..., family=binomial, data=matched)
-
+# aps1 is the variable with the worst SMD (0.501) after matching, thus we adjust for it in logistic regression:
+gmodel2 <- glm(outcome.died ~ treatment.swang + aps1, family=binomial, data=matched)
+summary(gmodel2)
 # => What is the odds ratio for treatment now?
+# In summary(gmodel2) we can see that the p-value for treatment is 2.57e-2, indicating that the coefficient of treatment is still significant (< 0.05). 
+sprintf("Coefficient of treatment is: %.5f.", coef(gmodel2)["treatment.swang"])
+# The estimated treatment coefficient is 0.19891, thus the odds ratio associated with treatment is exp(0.19891) = 1.2201. This means that the odds of death increase by a factor of 1.2201 in the treatment group compared to the no treatment group. Notably, this is a considerably smaller odds ratio than before adjusting for aps1 (note that the p-value is also a lot larger now (2.57e-2 vs 4.34e-10)).
 # print("===================================================")
 ```
 
@@ -404,10 +456,13 @@ gmodel2 <- glm(died ~ treatment + ..., family=binomial, data=matched)
 Fit a propensity score model to predict treatment (not the outcome!). Use logistic regression with glm
 ```{r}
 print("===================================================")
-psmodel <-  # => Use the variables we found before in xvars in the first assignment to predict treatment
-print("===================================================")
+# now the outcome variable is treatment (treatment.swang), not outcome.died since we're modeling "who was likely to receive RHC, given their covariates". "~ ." includes all other variables as predictors (besides what we're modeling).
+psmodel <- glm(treatment.swang ~ ., family = binomial, data = rhc.selected[, c(xvars, "treatment.swang")])# => Use the variables we found before in xvars in the first assignment to predict treatment
+
 summary(psmodel)   # show coefficients etc
 pscore<-psmodel$fitted.values # create propensity score
+
+print("===================================================")
 ```
 
 # Now it is time to check the positivity assumption
@@ -415,7 +470,21 @@ pscore<-psmodel$fitted.values # create propensity score
 ```{r}
 print("===================================================")
 #  => plot the density of the propensity scores of the treated and untreated. Tip: you might want to use par(mfrow=c(2,1)) to create 2 panels (2 rows, 1 column) and then plotting the first hist (histogram), with say, ylim=c(0,650) and col='darkblue', and the second histogram with ylim=c(650, 0) (note that we flipped the order) and col='darkblue'. This will plot the blue histogram as a normal histogram and the red one will be plotted upside down underneath the blue one so you can easily see the overlap.
+
+par(mfrow=c(2,1))
+
+hist(pscore[rhc.selected$treatment.swang == 1],
+     main = "Propensity score overlap", xlab = "Propensity score",
+     ylim = c(0, 650), col = "darkblue")
+
+hist(pscore[rhc.selected$treatment.swang == 0],
+     main = "", xlab = "Propensity score",
+     ylim = c(650, 0), col = "darkred")
+
+#TODO: pretty enough figure?
+
 # => What do you think about the overlap? 
+# Across most of the range of propensity scores there is substantial overlap (between 0.1 and 0.8), there exist comparable treated and untreated subjects to match at most points along the score. Only below 0.1 and between 0.8-0.9, there is little overlap, indicating a possible positivity violation in those small regions, which risks no valid comparison and thus few matches in those regions (since we will be using a caliper to ensure we avoid poor, distant matches). However, since this is real RHC data, we expected this decent but imperfect overlap in the tails, since, as we observed before, there simply are significantly more deaths (and thus higher propensity scores) in the treated group. In conclusion, the positivity assumption is okay here, but we note a possible limitation in the tails.
 print("===================================================")
 ```
 
@@ -423,7 +492,7 @@ We want to do greedy matching on PS using Match with a caliper. Note that instea
 
 ```{r}
 print("===================================================")
-logit <- function(p) {...} # => Complete this function to calculate the log odds
+logit <- function(p) {log(p/(1-p))} # => Complete this function to calculate the log odds
 print("===================================================")
 ```
 
@@ -432,9 +501,15 @@ Now we want to use Match() with rhc.selected$treatment.swang as treatement, with
 
 ```{r}
 print("===================================================")
-psmatch <- Match(Tr=mydata$treatment,...) # => complete the command
+# Compute all logits
+logits <- sapply(pscore, logit)
+
+#psmatch <- Match(Tr=mydata$treatment,...) # => complete the command
+
+psmatch <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logits, 
+                      replace = FALSE, Weight = 2, caliper = 0.2)
 print("===================================================")
-matched <- mydata[unlist(psmatch[c("index.treated","index.control")]), ]
+matched_ps <- rhc.selected[unlist(psmatch[c("index.treated","index.control")]), ]
 ```
 
 
@@ -442,18 +517,38 @@ matched <- mydata[unlist(psmatch[c("index.treated","index.control")]), ]
 
 ```{r}
 print("===================================================")
-matchedtab1 <- CreateTableOne(vars=xvars, strata ="...", 
-                            data=matched, test = FALSE) # => Complete the command
+matchedtab1_ps <- CreateTableOne(vars=xvars, strata ="treatment.swang", 
+                            data=matched_ps, test = FALSE) # => Complete the command
 # => print the matching table showing the SMD
+print(matchedtab1_ps, smd=TRUE)
+
+# Expect to see less variables with high SMD scores after matching. 
+
+# Following the slides:
+smd_values_matched_ps = ExtractSmd(matchedtab1_ps)
+adequate_balance_matched_ps <- rownames(smd_values_matched_ps)[smd_values_matched_ps < 0.1]
+not_too_alarming_matched_ps <- rownames(smd_values_matched_ps)[smd_values_matched_ps >= 0.1 & smd_values_matched_ps < 0.2]
+imbalanced_matched_ps <- rownames(smd_values_matched_ps)[smd_values_matched_ps > 0.2]
+
+sprintf("The following %d variables are adequately balanced between treatment and no treatment:", length(adequate_balance_matched_ps))
+print(adequate_balance_matched_ps)
+
+sprintf("The following %d variables are decently balanced between treatment and no treatment (on the border but not too alarming):", length(not_too_alarming_matched_ps))
+print(not_too_alarming_matched_ps)
+
+sprintf("The following %d variables are too imbalanced between treatment and no treatment:", length(imbalanced_matched_ps))
+print(imbalanced_matched_ps)
+
 # => Are there any variables with bad balance now?
+print("After matching there are 0 bad variables with SMD > 0.2 (even 0 with SMD > 0.1), compared to 7 after covariate matching and 12 before matching.")
 print("===================================================")
 ```
 
 ## Outcome analysis after propensity score matching
 ```{r}
 print("===================================================")
-y_trt.ps <- # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
-y_con.ps <- # Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
+y_trt.ps <- matched_ps$outcome.died[matched$treatment.swang == 1] # => Put here the vector of outcomes y (from matched$outcome.died) of those in the treatment group
+y_con.ps <- matched_ps$outcome.died[matched$treatment.swang == 0]# Put here the vector of outcomes y (from matched$outcome.died) of those in the control group
 print("===================================================")
 ```
 
@@ -465,6 +560,8 @@ diffy.ps <- y_trt.ps - y_con.ps # pairwise difference
 t.test(diffy.ps)
 print("===================================================")
 # => Is the test significant?
+#Yes, the p-value = 0.002966, so below 0.05. 
+# This means the mean difference in outcome (death) between treated and not treated groups (0.0569) is significantly different from 0. In other words, RHC patients-treated patients had significantly higher death rates than their matched controls. Note however that a t-test isn't ideal here since the binary data violates the normality assumption of a t-test.
 print("===================================================")
 ```
 
@@ -472,20 +569,53 @@ print("===================================================")
 Use the McNemar test as before. Enter the a, b, c, and d numbers you get from the 2x2 table in the McNemar test
 ```{r}
 print("===================================================")
-mcnemar.test(matrix(c(...),2,2)) # => Complete the command
+
+table(y_trt.ps,y_con.ps)
+
+#mcnemar.test(matrix(c(...),2,2)) # => Complete the command
 # => Is the p-value less than 0.05? What does this result mean?
 # => Compare the difference in the means before and after matching.
+
+
+# In this table you will see the 2x2 table:  
+#         y_con.p
+# ytreat.p     0     1
+#       0    a     b
+#       1    c     d
+
+mcnemar.test(table(y_trt.ps,y_con.ps))
+# => Is the p-value less than 0.05? What does this result mean?
+#Yes, the p-value is 0.00342, less than 0.05. This means the discordant pairs (b and c, where the outcome of treated and control disagreed) are imbalance, i.e., treatment status is associated with chance of death within matched pairs (evidence of treatment effect). Here, since c=339 is statistically significantly greater than b=266, there seems to be evidence that there is a higher chance of death among the treated patients within matched pairs, which is consistent with the t-test above.
+# => Compare the difference in the means before and after matching.
+#TODO: mean doesn't come out of mcnemar test right, or am i missing something?
+# Difference in means y_treat - y_con after matching on propensity is 0.05685358 (see t-test right above).
+# Difference in means y_treat - y_con after matching on covariates is 0.09111722  (see first t-test).
+# Difference in means y_treat - y_con before matching is 0.6804 - 0.6297 (from original descriptive data analysis at the top) = 0.0507. 
+# Since propensity matching achieved better covariate balance (lower SMDs), it more successfully removed confounding on the measured covariates, so it's the more trustworthy estimate of the two. That the raw difference in means estimate happens to resemble the propensity-matched estimate is likely coincidental sample-specific behavior, and not proof that confounding was absent. The SMD tables tell us that propensity matching demonstrably balanced the covariates better, which is why its estimate deserves more trust. The Mahalanobis number is more likely an artifact of incomplete balancing (and/or a different matched subsample) than a genuine midpoint in some meaningful confounding-removal trajectory. Anyways, the difference in means after balancing the matches well in the propensity-based approach, indicate that after adjusting for those possible confounders, there is still a difference in means between the treated and not treated groups, which is in line with the significance found in the t-test, mcnemar test and logistic regression below.
+
 print("===================================================")
 ```
 
 Use logistic regression
 ```{r}
-gmodel3 <- glm(died ~ treatment, family="binomial", data = matched)
+gmodel3 <- glm(outcome.died ~ treatment.swang, family=binomial, data=matched_ps)
 print("===================================================")
 # => What is the odds ratio of treatment?
+summary(gmodel3)
+# In summary(gmodel3) we can see that the p-value for treatment is 0.000481, indicating that the coefficient of treatment is significant. 
+sprintf("Coefficient of treatment is: %.5f.", coef(gmodel3)["treatment.swang"])
+# The estimated treatment coefficient is 0.24958, thus the odds ratio associated with treatment is exp(0.24958) = 1.2835. This means that the odds of death increase by a factor of 1.2835 in the treatment group compared to the no treatment group.
+
+
 # => Now correct also for the least well balanced variable
-gmodel3 <- glm(died ~ treatment + ..., family="binomial", data = matched)
+# scoma1 is the variable with the worst SMD (0.037) after matching, thus we adjust for it in logistic regression:
+gmodel4 <- glm(outcome.died ~ treatment.swang + scoma1, family=binomial, data=matched_ps)
 # => What is the odds ratio of treatment now?
+summary(gmodel4)
+# In summary(gmodel4) we can see that the p-value for treatment is 0.000279, indicating that the coefficient of treatment is still significant (<0.05). 
+sprintf("Coefficient of treatment is: %.5f.", coef(gmodel4)["treatment.swang"])
+# The estimated treatment coefficient is 0.261863, thus the odds ratio associated with treatment is exp(0.261863) = 1.2993 This means that the odds of death increase by a factor of 1.2993 in the treatment group compared to the no treatment group. Notably, this is a considerably smaller odds ratio than before adjusting for scoma1.
+
 print("===================================================")
 ```
 
