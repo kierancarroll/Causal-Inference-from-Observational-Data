@@ -213,6 +213,7 @@ rhc.small <- rhc.small[ , !(names(rhc.small) %in% names(missing.fraction)[missin
 for (v in names(missing.fraction)[missing.fraction > 0 & missing.fraction <= 0.15]) {
   rhc.small[[v]][is.na(rhc.small[[v]])] <- median(rhc.small[[v]], na.rm = TRUE)
 } #loops over variables that have a missing value proportion between 0 and 0.15 (excluding the former, including the latter), and impute the missing values for those variables as the median of the present values of that variable.
+#The choice between median, mode and average for this part is a bit arbitrary - any would work. We chose median as its generally more reliable and less skewed than average. And for data such as urin1 where the mode is 0, it offeres a bit more information over just plugging the mode.
 
 
 sprintf("There are %d missing values left in the rhc.small dataframe (should be 0)", sum(is.na(rhc.small)))
