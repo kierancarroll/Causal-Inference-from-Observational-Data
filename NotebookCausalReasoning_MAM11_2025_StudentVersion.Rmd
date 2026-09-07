@@ -69,7 +69,6 @@ rhc$treatment.swang <- as.numeric(rhc$swang1=='RHC')
 Let's take a quick look into the dataset using these variables
 ```{r}
 print("===================================================")
-# TODO: discuss rounding here. 
 # => What is the mean of outcome.died in the whole data set?
 mean_outcome_died <- mean(rhc$outcome.died)
 sprintf("Mean of outcome.died in whole data set is: %.4f", mean_outcome_died)
@@ -96,7 +95,6 @@ print("===================================================")
 
 The variable cat1 is a factor (categorical variable) containing the primary disease category for the patient.
 ```{r}
-# TODO: why does Hugo not need to convert to factor first?
 print("===================================================")
 # => How many different categories are in Cat1? Tip: use the levels() function on this variable.
 num_levels_cat1 <- length(levels(rhc$cat1))
@@ -215,7 +213,6 @@ rhc.small <- rhc.small[ , !(names(rhc.small) %in% names(missing.fraction)[missin
 for (v in names(missing.fraction)[missing.fraction > 0 & missing.fraction <= 0.15]) {
   rhc.small[[v]][is.na(rhc.small[[v]])] <- median(rhc.small[[v]], na.rm = TRUE)
 } #loops over variables that have a missing value proportion between 0 and 0.15 (excluding the former, including the latter), and impute the missing values for those variables as the median of the present values of that variable.
-#TODO: explain why median chosen over mean/mode
 
 
 sprintf("There are %d missing values left in the rhc.small dataframe (should be 0)", sum(is.na(rhc.small)))
@@ -485,8 +482,6 @@ hist(pscore[rhc.selected$treatment.swang == 0],
      main = "", xlab = "Propensity score",
      ylim = c(650, 0), col = "darkred")
 
-#TODO: pretty enough figure?
-
 # => What do you think about the overlap? 
 # Across most of the range of propensity scores there is substantial overlap (between 0.1 and 0.8), there exist comparable treated and untreated subjects to match at most points along the score. Only below 0.1 and between 0.8-0.9, there is little overlap, indicating a possible positivity violation in those small regions, which risks no valid comparison and thus few matches in those regions (since we will be using a caliper to ensure we avoid poor, distant matches). However, since this is real RHC data, we expected this decent but imperfect overlap in the tails, since, as we observed before, there simply are significantly more deaths (and thus higher propensity scores) in the treated group. In conclusion, the positivity assumption is okay here, but we note a possible limitation in the tails.
 print("===================================================")
@@ -594,11 +589,10 @@ mcnemar.test(table(y_trt.ps,y_con.ps))
 # => Is the p-value less than 0.05? What does this result mean?
 #Yes, the p-value is 1.208e-05, a lot less than 0.05. This means the discordant pairs (b and c, where the outcome of treated and control disagreed) are imbalance, i.e., treatment status is associated with chance of death within matched pairs (evidence of treatment effect). Here, since c=457 is statistically significantly greater than b=333, there seems to be evidence that there is a higher chance of death among the treated patients within matched pairs, which is consistent with the t-test above.
 # => Compare the difference in the means before and after matching.
-#TODO: mean doesn't come out of mcnemar test right, or am i missing something?
 # Difference in means y_treat - y_con after matching on propensity is 0.07151096  (see t-test right above).
 # Difference in means y_treat - y_con after matching on covariates is 0.09111722  (see first t-test).
 # Difference in means y_treat - y_con before matching is 0.6804 - 0.6297 (from original descriptive data analysis at the top) = 0.0507. 
-# Since propensity matching achieved better covariate balance (lower SMDs), it more successfully removed confounding on the measured covariates, so it's the more trustworthy estimate of the two. That the raw difference in means estimate happens to resemble the propensity-matched estimate is likely coincidental sample-specific behavior, and not proof that confounding was absent. The SMD tables tell us that propensity matching demonstrably balanced the covariates better, which is why its estimate deserves more trust. The Mahalanobis number being even slightly higher is more likely an artifact of incomplete balancing (and/or a different matched subsample) than a genuine midpoint in some meaningful confounding-removal trajectory. Anyways, the difference in means after balancing the matches well in the propensity-based approach, indicate that after adjusting for those possible confounders, there is still a difference in means between the treated and not treated groups, which is in line with the significance found in the t-test, McNemar test and logistic regression below.
+# Since propensity matching achieved better covariate balance (lower SMDs), it more successfully removed confounding on the measured covariates, so it's the more trustworthy estimate of the two. That the raw difference in means estimate happens to resemble the propensity-matched estimate is likely coincidental sample-specific behavior, and not proof that confounding was absent. The SMD tables tell us that propensity matching demonstrably balanced the covariates better, which is why its estimate is more trustworthy. The Mahalanobis number being even slightly higher is more likely an artifact of incomplete balancing (and/or a different matched subsample) than a genuine midpoint in some meaningful confounding-removal trajectory. Anyways, the difference in means after balancing the matches well in the propensity-based approach, indicate that after adjusting for those possible confounders, there is still a difference in means between the treated and not treated groups, which is in line with the significance found in the t-test, McNemar test and logistic regression below.
 
 print("===================================================")
 ```
