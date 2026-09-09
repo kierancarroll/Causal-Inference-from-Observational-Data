@@ -15,6 +15,8 @@ Please provide information about your group:
 ==> Student names: 
 ==> Student numbers:
 
+#TODO: names, student numbers and disclaimer that all em dashes used were human written haha?
+
 # Closed part (70% of the grade)
 
 ## Understand the dataset:
@@ -213,7 +215,7 @@ rhc.small <- rhc.small[ , !(names(rhc.small) %in% names(missing.fraction)[missin
 for (v in names(missing.fraction)[missing.fraction > 0 & missing.fraction <= 0.15]) {
   rhc.small[[v]][is.na(rhc.small[[v]])] <- median(rhc.small[[v]], na.rm = TRUE)
 } #loops over variables that have a missing value proportion between 0 and 0.15 (excluding the former, including the latter), and impute the missing values for those variables as the median of the present values of that variable.
-#The choice between median, mode and average for this part is a bit arbitrary - any would work. We chose median as its generally more reliable and less skewed than average. And for data such as urin1 where the mode is 0, it offeres a bit more information over just plugging the mode.
+#We chose median as its generally more reliable and less skewed than average. And for data such as urin1 where the mode is 0, it offers a bit more information over just plugging the mode.
 
 
 sprintf("There are %d missing values left in the rhc.small dataframe (should be 0)", sum(is.na(rhc.small)))
@@ -344,6 +346,25 @@ matched[1,]  # This is the first treated subject
 print("===================================================")
 matched[length(greedymatch$index.treated)+1,] # => What do you think this subject is?
 # Because unlist(greedymatch[c("index.treated","index.control")]) concatenates all of index.treated first, then all of index.control, the resulting matched dataframe contains in rows 1 to length(index.treated) → all the treated subjects in matching order, and in rows length(index.treated)+1 to 2×length(index.treated) (since 1:1 matching) all the matched controls, in the same order as their treated counterparts. Therefore, matched[length(greedymatch$index.treated)+1,] is the control subject matched to the first treated subject (the one printed just above here).
+print("===================================================")
+```
+
+=> Added analysis about number of matched patients.
+
+```{r}
+num_matched_treated = length(greedymatch$index.treated)
+num_matched_control = length(greedymatch$index.control)
+sprintf("Number of matched treated patients is %d, and the number of matched control patients is %d", num_matched_treated, num_matched_control)
+print("Number of matched treated and control patients should be equal since 1:1 matching.")
+
+num_not_matched_treated = num_treated - num_matched_treated
+fraction_treated_matched = num_matched_treated/num_treated*100
+num_not_matched_control = num_not_treated - num_matched_control
+fraction_control_matched = num_matched_control/num_not_treated*100
+
+
+sprintf("There are %d treated patients not matched, meaning that %.2f percent of treated patients got matched",num_not_matched_treated, fraction_treated_matched)
+sprintf("There are %d control patients not matched, meaning that %.2f percent of control patients got matched",num_not_matched_control, fraction_control_matched)
 print("===================================================")
 ```
 
@@ -626,18 +647,18 @@ print("===================================================")
 Instead of the glm to calculate the propensity score use any machine learning technique you like such as a regression tree (using rpart), or random forests (randomForest) or neural networks (neuralnet) or another formalism in R to create the propensity score model and to predict the probabilities on such a model. Note that you might need to tweak the model parameters in order to improve it. Compare your results to those you obtained by matching (via the Mahalanobis distance and the propensity score with logistic regression). Which approach do you prefer, and why?
 
 
-So far we have compared the Mahalanobis distance and propensity score, with the score coming in as the strong favourite due to its more comprehensive nature - in the end encoding within it more information than the euclidian distance matching could. However we still have the case of machine learning models. As a group we have decided to try multiple approaches and compare our findings and results at the end.
+So far we have compared the Mahalanobis distance and propensity score, with the latter coming in as the strong favourite due to its more comprehensive nature - in the end encoding within it more information than the euclidian distance matching could. However we still have the case of machine learning models. As a group we have decided to try multiple approaches and compare our findings and results at the end.
 
-First up is Random Forest. It was primarily chosen due to its simplicity - it is often the first choice when ML is in the conversation, it may not have stellar results compared to other methods but it is steady and reliable. An interesting concept that came to mind (only a theory at this point, yet to be proven or disproven later in this chapter) is that of continuous vs discrete values. You see our previous two metrics, particularly PS is a continuous value, which works perfectly fine, but in the medical field our decisions are rarely motivated by proportions, but rather by thresholds. A patient is not "62% hypertensive", but rather a certain blood pressure threshold triggers treatment. Clinical reasoning can be observed as a sequence of cutoff points, which coincidentally is the precise mechanism a decision tree, and by extension - Random Forest, operates with.
+First up is Random Forest. It was primarily chosen due to its simplicity; it is often the classic first choice when ML is in the conversation, it may not have stellar results compared to other methods but it is steady, reliable and relatively interpretable. An interesting concept that came to mind (only a theory at this point, yet to be proven or disproven later in this chapter) is that of continuous vs discrete values. You see our previous two metrics, particularly PS is a continuous value, which works perfectly fine, but in the medical field our decisions are rarely motivated by proportions, but rather by thresholds. A patient is not "62% hypertensive", but rather a certain blood pressure threshold triggers treatment. Clinical reasoning can be observed as a sequence of cutoff points, which coincidentally is the precise mechanism a decision tree, and by extension - Random Forest, operates with.
 Whether this structural resemblance translates into better estimates, is what we set out to test in this next section.
 
 ```{r}
-install.packages("randomForest")
+#install.packages("randomForest") can comment out after ran once. TODO: comment in/out when submitting?
 library(randomForest)
 
 rf.data <- rhc.selected[, c(xvars, "treatment.swang")]
 rf.data$treatment.swang <- as.factor(rf.data$treatment.swang)
-set.seed(42) #standard seed initialization
+set.seed(42) #standard seed initialization for reproducibility
 
 ```
 
@@ -650,71 +671,74 @@ plot(rf.model)
 
 ```
 This is quite a bit to digest so lets go step by step, first up is ntree = 500. This is the number of trees in the forest, and 500 is the default value. Adding more trees never hurts the result, but adds compute time, and also by plotting rf.model we can see that the probabilities even out and are stable well before the 500 mark, suggesting that upping the number is not necessary.
-The main dial we have is nodesize, the minimum number of patients allowed in a leaf. Its default is 1, meaning a tree keeps splitting until every leaf is pure, so in the limit each leaf is essentially one patient and the tree has memorised the training data. Our starting idea was that this would be bad for a propensity score: a leaf that has memorised a single patient can only ever say "treated" or "not treated", so we expected the scores to pile up at 0 and 1, which would give infinite logits and destroy the overlap we need for matching. Forcing larger leaves seemed like the natural fix, since a leaf of 25 patients has to base its vote on a mix of treated and untreated cases rather than on a single one, and we expected that to produce smoother scores and better overlap. We therefore chose nodesize = 25 as a starting point, large enough to stop memorisation but small enough that the trees can still tell patients apart. Rather than trust that reasoning, we test it. For each of several nodesize values we fit a forest, take its propensity scores, and run exactly the same matching and balance check we used for the glm propensity score, so that nodesize is judged by the thing we actually care about: overlap in the histograms and balance after matching .
+The main dial we have is nodesize, the minimum number of patients allowed in a leaf. Its default is 1, meaning a tree keeps splitting until every leaf is pure, so in the limit each leaf is essentially one patient and the tree has memorised the training data. Our starting idea was that this would be bad for a propensity score: a leaf that has memorised a single patient can only ever say "treated" or "not treated", so we expected the scores to pile up at 0 and 1, which would give infinite logits and destroy the overlap we need for matching. Forcing larger leaves seemed like the natural fix, since a leaf of 25 patients has to base its vote on a mix of treated and untreated cases rather than on a single one, and we expected that to produce smoother scores and better overlap. We therefore chose nodesize = 25 as a starting point, large enough to stop memorisation but small enough that the trees can still tell patients apart. Rather than trust that reasoning, we test it. For each of several nodesize values we fit a forest, take its propensity scores, and run exactly the same matching and balance check we used for the glm propensity score, so that nodesize is judged by the thing we actually care about: overlap in the histograms and balance after matching.
 
 
 ```{r}
+#TODO: add more comments to the code to explain what we have done.
 nodesizes <- c(1, 5, 10, 25, 50, 100)
 ps.by.nodesize <- list()
 nodesize.comparison <- data.frame()
  
 for (ns in nodesizes) {
-  set.seed(42)
-  m  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = ns)
-
-  ps <- predict(m, type = "prob")[, "1"]
-  ps.by.nodesize[[as.character(ns)]] <- ps
+  set.seed(42) #Makes the forest's randomness (e.g. bootstrap sampling and feature selection at splits) reproducible
+  m  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = ns) #Fits forest for current node size
+  ps <- predict(m, type = "prob")[, "1"] #Calculates for each patient the predicted propensity score (probability of class = 1), which is the fraction of the 500 trees whose majority prediction was "treated"
+  ps.by.nodesize[[as.character(ns)]] <- ps #add propensity scores per node size to named list (R's rough equivalent of Python dictionary)
  
 
-  # Scores of exactly 0 or 1 have an infinite logit, so we bump them by 0.1 to not get an error
+  # Scores of exactly 0 or 1 have an infinite logit, so we push them up to 0.005 or down to 0.995 to not get an error
   ps.c <- pmin(pmax(ps, 0.005), 0.995)
-  set.seed(42)
+  set.seed(42) #TODO: is this needed again?
+  # 1:1 greedy matching with Mahalanobis distance on the logit transformed propensity score predicted by the RF, with no replacement and a caliper of 0.2 as before so that we can accurately compare the propensity score calculation method (controlling for other hyperparameters). 
   mt  <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(ps.c),
                replace = FALSE, Weight = 2, caliper = 0.2)
-  md  <- rhc.selected[unlist(mt[c("index.treated", "index.control")]), ]
-  smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE))
+  md  <- rhc.selected[unlist(mt[c("index.treated", "index.control")]), ] #Extract matched data, then unmatched subjects as before
+  smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE))#Calculate and extract SMD scores to check balancing
  
+  # Comparison table; add 1 row of info per node size
   nodesize.comparison <- rbind(nodesize.comparison, data.frame(
     nodesize       = ns,
-    oob.error      = round(tail(m$err.rate[, "OOB"], 1), 3),
-    extreme.scores = sum(ps < 0.01 | ps > 0.99),   # patients with almost certain preductions
-    matched.pairs  = length(mt$index.treated),
-    max.smd        = round(max(smd), 3),
-    n.smd.over.0.1 = sum(smd > 0.1)))
+    oob.error      = round(tail(m$err.rate[, "OOB"], 1), 3), #TODO: should we include this, since we dont want the model to be too predictive since then we are not balanced well.  or add as red flag for positivity as below? Out-of-bound error rate, i.e. held-out validation error for each full RF of 500 trees (similary to classical cross validation). Tells us how accurately predictive model is, but note that we don't want model to predict propensity scores perfectly as 0/1 since then there is bad overlap/positivity in scores. 
+    extreme.scores = sum(ps < 0.01 | ps > 0.99),   # patients with almost certain predictions, don't want this high since leads to unbalanced dataset (bad for positivity)
+    matched.pairs  = length(mt$index.treated), # how many subjects succesfully found a caliper satisfying match (fewer = worse overlap/positivity)
+    max.smd        = round(max(smd), 3), #maximum found smd (most unbalanced variable)
+    n.smd.over.0.1 = sum(smd > 0.1))) #number of variables not adequately balanced
 }
 print(nodesize.comparison)
 
-# blue - treated, red - untreatedS
+# blue - treated, red - untreated
 par(mfrow = c(2, 3))
-for (ns in nodesizes) {
-  ps   <- ps.by.nodesize[[as.character(ns)]]
+for (ns in nodesizes) { #For each node size make a plot
+  ps   <- ps.by.nodesize[[as.character(ns)]] 
   brks <- seq(0, 1, 0.05)
   ymax <- max(hist(ps, breaks = brks, plot = FALSE)$counts)
+  #Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
   hist(ps[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
-       xlab = "Propensity score", main = paste("nodesize =", ns), ylim = c(0, ymax))
-  hist(ps[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE)
+       xlab = "Propensity score", main = paste("nodesize =", ns), ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap them nicely
+  hist(ps[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlapping histogram
 }
 par(mfrow = c(1, 1))
 ```
 
-The histograms tell a different story from the one we expected. The small values (1, 5 and 10) look best: one hump per group, both spread across roughly 0 to 0.9, and wide overlap in the middle. Larger values make things worse, and at 50 and 100 the untreated patients collapse into a spike near 0. The reason is that each tree votes for the majority class of its leaf, and with leaves of 100 patients almost every leaf is majority-untreated (62% of all patients are), so almost every tree votes "not treated" for almost everyone. Our worry about the forests remembering patients applied to a single tree, but the propensity score is the average vote of 500 trees grown on different bootstrap samples, and that averaging already smooths the scores. Looking at the table - nodesize 10 and 25 give the best balance (2 variables with SMD above 0.1, max SMD 0.113 and 0.115), while 50 and 100 produce many more near-certain scores (45 and 128) and worse balance (4 and 8 variables above 0.1). Nodesize 1 is slightly worse than 10 as well, so the very smallest leaves add a little noise. Between 10 and 25, nodesize 10 has fewer extreme scores (4 versus 20) and keeps more matched pairs (1672 versus 1656), so that is what we use for the final model; our starting guess of 25 was close, but not the best. Note already that even the best forest leaves two variables above 0.1, where the glm propensity score left none, a point we shall return to. Overall the choice between node count is narrower than the graphs tell at first.
+The histograms tell a different story from the one we expected. The small values (1, 5 and 10) look best: one hump per group, both spread across roughly 0 to 0.9, and wide overlap in the middle. Larger values make things worse, and at 50 and 100 the untreated patients collapse into a spike near 0. The reason is that each tree votes for the majority class of its leaf, and with leaves of 100 patients almost every leaf is majority-untreated (62% of all patients in the entire dataset are), so the majority of trees vote "not treated" for most patients. Our worry about the forests remembering patients applied to a single tree, but the propensity score is the average vote of 500 trees grown on different bootstrap samples and different random subsets of features, and that averaging combined with the randomness already smooths the scores sufficiently. Looking at the table - nodesize 10 and 25 give the best balance (2 variables with SMD above 0.1, max SMD 0.113 and 0.115), while 50 and 100 produce many more near-certain scores (45 and 128) and worse balance (4 and 8 variables above 0.1). Nodesize 1 is slightly worse than 10 as well, so the very smallest leaves add a little noise. Between 10 and 25, nodesize 10 has fewer extreme scores (4 versus 20) and keeps more matched pairs (1672 versus 1656), so that is what we use for the final model; our starting guess of 25 was close, but not the best. Note already that even the best forest leaves two variables above 0.1, where the glm propensity score left none, a point we shall return to. Overall the choice between node count is narrower than the graphs tell at first.
 
 
 ```{r}
 set.seed(42)
 rf.model  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = 10)
 print(rf.model)
-plot(rf.model)   # out-of-bag error rate against number of trees: flat long before 500
+plot(rf.model)   # out-of-bag (held-out validation) error rate against number of trees: flat long before 500
  
 pscore.rf <- predict(rf.model, type = "prob")[, "1"]
 sprintf("Correlation between glm and random forest propensity scores: %.3f", cor(pscore, pscore.rf))
 ```
-The final forest reports an out-of-bag error of 28.9%, against a no-information baseline of 38.1% (the share of treated patients), so it has learned about who gets a catheter but is far from certain about it. The confusion matrix shows that this uncertainty is one-sided: 86% of untreated patients are classified correctly but only 46% of treated ones. That is the majority class effect again, a patient is only labelled "treated" if more than half the trees vote for it, and with 62% of patients untreated the forest leans that way. Howevre we dont use the 0.5 cut-off rather we use the vote fraction itself as the propensity score. A theme that echoes throughout this assignment is that perfect prediction would be bad, since it would mean treated and untreated patients do not overlap and cannot be matched. The error plot shows the out-of-bag error (black) settling by around 150 trees and staying flat to 500, with the two class errors (red for untreated, green for treated) doing the same, which confirms that 500 trees is plenty. Finally, the forest's propensity scores correlate at 0.82 with those from the logistic regression. The two models largely agree on who was likely to be treated, which is reassuring, but they are not identical, so there is room for the forest's threshold-based view of the data to make a difference. Whether it does is a matter of balance, so we now match on the forest's score exactly as we did on the glm's. (note - it is quite a bit of duplicate code from earlier in this notebook)
+The final forest reports an out-of-bag error of 28.9%, against a no-information majority-vote baseline of 38.1% (the share of treated patients), so it has learned about who gets a catheter but is far from certain about it. The confusion matrix (see above) shows that this uncertainty is one-sided: 86% ((1-0.1368629) * 100) of untreated patients are classified correctly but only 46%  ((1-0.5366300) * 100) of treated ones. That is the majority class effect again, a patient is only labelled "treated" if more than half the trees vote for it, and with 62% of patients untreated the forest leans that way.#TODO: is that true? Howevre we dont use the 0.5 cut-off rather we use the vote fraction itself as the propensity score. A theme that echoes throughout this assignment is that perfect prediction would be bad, since it would mean treated and untreated patients do not overlap and cannot be matched. The error plot shows the out-of-bag error (black) settling by around 150 trees and staying flat to 500, with the two class errors (red for untreated, green for treated) doing the same, which confirms that 500 trees is plenty. Finally, the forest's propensity scores correlate at 0.82 with those from the logistic regression. This means the two models largely agree on who was likely to be treated, which is reassuring, but they are not identical (TODO: inspect where they are different/same? like which patients the scores are more/less similar and if those patients share attributes?), so there is room for the forest's threshold-based view of the data to make a difference (#TODO what does that mean?). Whether it does is a matter of balance, so we now match on the forest's score exactly as we did on the glm's (#TODO we already did that?). (note - it is quite a bit of duplicate code from earlier in this notebook)
 
 ```{r}
 print("===================================================")
 # Overlap check, as for the glm score
-par(mfrow = c(2, 1))
+par(mfrow = c(2, 1)) #TODO: already have ur graphs above?
 hist(pscore.rf[rhc.selected$treatment.swang == 1], main = "Random forest propensity score overlap",
      xlab = "Propensity score", ylim = c(0, 650), col = "darkblue")
 hist(pscore.rf[rhc.selected$treatment.swang == 0], main = "",
@@ -727,7 +751,7 @@ logits.rf   <- logit(pscore.rf.c)
 
 set.seed(42)
 psmatch.rf <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logits.rf,
-                    replace = FALSE, Weight = 2, caliper = 0.2)
+                    replace = FALSE, Weight = 2, caliper = 0.2) #Isn't this entire analysis the same as the one just above for ns=10? #TODO
 matched_rf <- rhc.selected[unlist(psmatch.rf[c("index.treated", "index.control")]), ]
 sprintf("Matched pairs: Mahalanobis = %d, glm PS = %d, random forest PS = %d (of %d treated)",
         length(greedymatch$index.treated), length(psmatch$index.treated),
@@ -782,10 +806,103 @@ effects <- data.frame(
   mean.diff   = c(mean(y_trt - y_con), mean(y_trt.ps - y_con.ps), mean(y_trt.rf - y_con.rf)),
   OR          = exp(c(coef(gmodel1)["treatment.swang"], coef(gmodel3)["treatment.swang"], coef(gmodel5)["treatment.swang"])),
   OR.adjusted = exp(c(coef(gmodel2)["treatment.swang"], coef(gmodel4)["treatment.swang"], coef(gmodel6)["treatment.swang"])),
-  smd.over.0.1 = colSums(smd.compare > 0.1)[c("mahalanobis", "ps.glm", "ps.rf")],
+  smd.over.0.1 = colSums(smd.compare > 0.1)[c("mahalanobis", "ps.glm", "ps.rf")], #TODO: maybe split in 0.1-0.2 and over 0.2 to be inline with slides?
   worst.smd   = round(apply(smd.compare, 2, max)[c("mahalanobis", "ps.glm", "ps.rf")], 3))
 print(effects, digits = 4, row.names = FALSE)
 print("===================================================")
 ```
-So what does this mountain of numbers and graphs tell us? Lets break it down - The overlap is good, with the centre around 0.4, both groups covering 0.05 to about 0.85, with the forest not producing any scores near 1. The caliper keeps 1672 out of our 2184 treated patients, which is 62 fewer than the glm. The balance is similarly good, but not exceptional, no variable above SMD 0.2, 38 of 40 below 0.1, with only malighx (0.113) and pot1 (0.107) borderline. 
-On the whole it beats the distance matching but lags a bit behind the glm. The effect points the same way as before but is smaller: mean difference 0.038 (t-test p = 0.021), McNemar p = 0.023 with 406 discordant pairs where the treated patient died against 343 where the control died, OR 1.18 (p = 0.022) versus 1.31 for the glm and 1.48 for Mahalanobis. Our preference is therefore the glm propensity score: it balanced every variable, kept more pairs, needed no tuning or clipping, did not move under adjustment, and is readable. The forest did not confirm our hypothesis that a threshold-based model would balance better, but it earns its place as a robustness check: a model with no additivity assumption, matched by the same protocol, still finds higher mortality among treated patients, so the RHC result does not depend on the form of the logistic model. Mahalanobis matching is the clear loser, with the most residual imbalance and the estimate that shifted most under adjustment.
+So what does this mountain of numbers and graphs tell us? (#TODO haha I like the wording but do you think we should keep it more professional?) Lets break it down - The overlap is good, with the centre around 0.4, both groups covering 0.05 to about 0.85, with the forest not producing any scores near 1. The caliper keeps 1672 out of our 2184 treated patients, which is 62 fewer than the glm (TODO: #any conclusion about this?). The balance is similarly good, but not exceptional, no variable above SMD 0.2, 38 of 40 below 0.1, with only malighx (0.113) and pot1 (0.107) borderline (#TODO, compare to glm pscore, i think had everything below 0.1? should we compare mean smd score?). 
+On the whole it beats the distance matching but lags a bit behind the glm. The effect points the same way as before but is smaller: mean difference 0.038 (t-test p = 0.021), McNemar p = 0.023 with 406 discordant pairs where the treated patient died against 343 where the control died, OR 1.18 (p = 0.022) versus 1.31 for the glm and 1.48 for Mahalanobis. Our preference is therefore the glm propensity score: it balanced every variable, kept more pairs, needed no tuning or clipping (#TODO: why?), did not move under adjustment, and is readable. The forest did not confirm our hypothesis that a threshold-based model would balance better, but it earns its place as a robustness check: a model with no additivity assumption, matched by the same protocol, still finds higher mortality among treated patients, so the RHC result does not depend on the form of the logistic model (#TODO love this). Mahalanobis matching is the clear loser, with the most residual imbalance (#TODO what do you mean with this) and the estimate that shifted most under adjustment #TODO and worst balance/SMD scores? or is that residual imbalance?.
+
+
+
+
+
+
+## Neural Network part
+```{r}
+library(nnet)
+library(caret)
+
+# Build a numeric design matrix: dummy-code any categorical xvars, keep numerics as-is
+nn.data <- rhc.selected[, c(xvars, "treatment.swang")]
+nn.data$treatment.swang <- factor(nn.data$treatment.swang, labels = c("no", "yes"))  # caret needs valid factor labels
+
+# model.matrix handles factor -> dummy expansion automatically; [,-1] drops intercept column
+X.raw <- model.matrix(~ . - 1, data = nn.data[, xvars])
+
+# Standardize (mean 0, sd 1) -- essential for NN training stability, unlike RF/glm
+preproc <- preProcess(X.raw, method = c("center", "scale"))
+X.scaled <- predict(preproc, X.raw)
+
+nn.df <- data.frame(X.scaled, treatment.swang = nn.data$treatment.swang)
+
+set.seed(42)
+ctrl <- trainControl(method = "cv", number = 5, classProbs = TRUE,
+                      summaryFunction = twoClassSummary)  # gives ROC/AUC as the tuning metric
+
+grid <- expand.grid(size  = c(2, 4, 6, 8, 12),     # hidden units
+                     decay = c(0, 0.001, 0.01, 0.1, 0.5))  # L2 regularization strength
+
+nn.tuned <- train(treatment.swang ~ ., data = nn.df, method = "nnet",
+                   tuneGrid = grid, trControl = ctrl, metric = "ROC",
+                   trace = FALSE, maxit = 300, linout = FALSE)
+
+print(nn.tuned)
+plot(nn.tuned)  # visualizes AUC across the size x decay grid
+
+
+nn.final <- nn.tuned$finalModel  # or refit nnet() directly with nn.tuned$bestTune values
+pscore.nn <- predict(nn.tuned, newdata = nn.df, type = "prob")[, "yes"]
+
+sprintf("Best hyperparameters: size=%d, decay=%.3f", nn.tuned$bestTune$size, nn.tuned$bestTune$decay)
+sprintf("Correlation with glm propensity scores: %.3f", cor(pscore, pscore.nn))
+sprintf("Correlation with RF propensity scores: %.3f", cor(pscore.rf, pscore.nn))
+
+par(mfrow = c(2, 1))
+hist(pscore.nn[rhc.selected$treatment.swang == 1], main = "NN propensity score overlap",
+     xlab = "Propensity score", ylim = c(0, 650), col = "darkblue")
+hist(pscore.nn[rhc.selected$treatment.swang == 0], main = "",
+     xlab = "Propensity score", ylim = c(650, 0), col = "darkred")
+par(mfrow = c(1, 1))
+
+pscore.nn.c <- pmin(pmax(pscore.nn, 0.005), 0.995)
+logits.nn <- logit(pscore.nn.c)
+
+set.seed(42)
+psmatch.nn <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logits.nn,
+                     replace = FALSE, Weight = 2, caliper = 0.2)
+matched_nn <- rhc.selected[unlist(psmatch.nn[c("index.treated", "index.control")]), ]
+
+matchedtab1_nn <- CreateTableOne(vars = xvars, strata = "treatment.swang", data = matched_nn, test = FALSE)
+smd_values_matched_nn <- ExtractSmd(matchedtab1_nn)
+print(matchedtab1_nn, smd = TRUE)
+
+y_trt.nn <- matched_nn$outcome.died[matched_nn$treatment.swang == 1]
+y_con.nn <- matched_nn$outcome.died[matched_nn$treatment.swang == 0]
+
+t.test(y_trt.nn - y_con.nn)
+mcnemar.test(table(y_trt.nn, y_con.nn))
+
+gmodel7 <- glm(outcome.died ~ treatment.swang, family = binomial, data = matched_nn)
+worst.nn <- rownames(smd_values_matched_nn)[which.max(smd_values_matched_nn)]
+gmodel8 <- glm(as.formula(paste("outcome.died ~ treatment.swang +", worst.nn)), family = binomial, data = matched_nn)
+
+sprintf("OR (unadjusted): %.4f", exp(coef(gmodel7)["treatment.swang"]))
+sprintf("OR (adjusted for %s): %.4f", worst.nn, exp(coef(gmodel8)["treatment.swang"]))
+
+train.probs.nn <- predict(nn.tuned, newdata = nn.df, type = "prob")[, "yes"]
+pROC::auc(nn.df$treatment.swang, train.probs.nn)          # train AUC
+max(nn.tuned$results$ROC)                                  # best CV AUC
+
+effects <- rbind(effects, data.frame(
+  method       = "PS (neural net)",
+  pairs        = length(psmatch.nn$index.treated),
+  mean.diff    = mean(y_trt.nn - y_con.nn),
+  OR           = exp(coef(gmodel7)["treatment.swang"]),
+  OR.adjusted  = exp(coef(gmodel8)["treatment.swang"]),
+  smd.over.0.1 = sum(smd_values_matched_nn > 0.1),
+  worst.smd    = round(max(smd_values_matched_nn), 3)))
+print(effects, digits = 4, row.names = FALSE)
+```
+
