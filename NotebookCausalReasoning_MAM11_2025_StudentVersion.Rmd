@@ -653,6 +653,7 @@ Instead of the glm to calculate the propensity score use any machine learning te
 #Installing and loading required packages. Can comment installation lines out after ran once.
 install.packages("randomForest")
 install.packages("caret")
+install.packages("data.table") # reinstall into the user library: the system copy was built for an older R and fails to load (undefined symbol SETLENGTH), which breaks library(caret)
 install.packages("pROC")
 install.packages("CBPS")
 install.packages("ggplot2")
@@ -956,7 +957,8 @@ effects <- data.frame(
   mean.diff   = c(mean(y_trt - y_con), mean(y_trt.ps - y_con.ps), mean(y_trt.rf - y_con.rf)),
   OR          = exp(c(coef(gmodel1)["treatment.swang"], coef(gmodel3)["treatment.swang"], coef(gmodel5)["treatment.swang"])),
   OR.adjusted = exp(c(coef(gmodel2)["treatment.swang"], coef(gmodel4)["treatment.swang"], coef(gmodel6)["treatment.swang"])),
-  smd.over.0.1 = colSums(smd.compare > 0.1)[c("mahalanobis", "ps.glm", "ps.rf")], #TODO: maybe split in 0.1-0.2 and over 0.2 to be inline with slides?
+  smd.0.1.to.0.2 = colSums(smd.compare > 0.1 & smd.compare <= 0.2)[c("mahalanobis", "ps.glm", "ps.rf")], # number of variables with borderline imbalance (0.1 < SMD <= 0.2)
+  smd.over.0.2 = colSums(smd.compare > 0.2)[c("mahalanobis", "ps.glm", "ps.rf")], # number of variables with clear imbalance (SMD > 0.2)
   worst.smd   = round(apply(smd.compare, 2, max)[c("mahalanobis", "ps.glm", "ps.rf")], 3))
 print(effects, digits = 4, row.names = FALSE)
 
@@ -982,7 +984,8 @@ effects <- rbind(effects, data.frame(
   mean.diff    = mean(y_trt.nn - y_con.nn),
   OR           = exp(coef(gmodel7)["treatment.swang"]),
   OR.adjusted  = exp(coef(gmodel8)["treatment.swang"]),
-  smd.over.0.1 = sum(smd_values_matched_nn > 0.1),
+  smd.0.1.to.0.2 = sum(smd_values_matched_nn > 0.1 & smd_values_matched_nn <= 0.2),
+  smd.over.0.2 = sum(smd_values_matched_nn > 0.2),
   worst.smd    = round(max(smd_values_matched_nn), 3)))
 print(effects, digits = 4, row.names = FALSE)
 print("===================================================")
