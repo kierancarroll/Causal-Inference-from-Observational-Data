@@ -896,6 +896,31 @@ sprintf("SMD > 0.2: %d variables", sum(smd_values_matched_cbps > 0.2))
 # Here we define our best performing model for each of the 2 finetuned methods and then continue with the rest of the analysis.
 # Then, compare the number of matched pairs and balancing (through max SMD score, and number of variables below 0.1, between 0.1-0.2 and over 0.2 respecitvely). below is some code from before that can be used for this.
 ```{r}
+# Final random forest: node size 10 (chosen above), default mtry, 500 trees. Propensity score = out-of-bag vote fraction, as in the tuning grid.
+set.seed(42)
+rf.model  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = 10)
+pscore.rf <- predict(rf.model, type = "prob")[, "1"]
+set.seed(42)
+psmatch.rf <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(pmin(pmax(pscore.rf, 0.005), 0.995)),
+                    replace = FALSE, Weight = 2, caliper = 0.2)
+matched_rf <- rhc.selected[unlist(psmatch.rf[c("index.treated", "index.control")]), ]
+matchedtab1_rf <- CreateTableOne(vars = xvars, strata = "treatment.swang", data = matched_rf, test = FALSE)
+smd_values_matched_rf <- ExtractSmd(matchedtab1_rf)
+
+# Final neural network: the grid combination with the most variables under SMD 0.1, ties broken by lowest max SMD and then by most matched pairs (overlap).
+best.nn <- nn.comparison[order(-nn.comparison$n.smd.under.0.1, nn.comparison$max.smd, -nn.comparison$matched.pairs), ][1, ]
+sprintf("Selected NN: size = %d, decay = %s (%d variables with SMD < 0.1, max SMD %.3f, %d matched pairs)",
+        best.nn$size, best.nn$decay, best.nn$n.smd.under.0.1, best.nn$max.smd, best.nn$matched.pairs)
+pscore.nn <- ps.by.combo.nn[[paste0("size", best.nn$size, "_decay", best.nn$decay)]] # scores already computed in the grid
+set.seed(42)
+psmatch.nn <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(pmin(pmax(pscore.nn, 0.005), 0.995)),
+                    replace = FALSE, Weight = 2, caliper = 0.2)
+matched_nn <- rhc.selected[unlist(psmatch.nn[c("index.treated", "index.control")]), ]
+matchedtab1_nn <- CreateTableOne(vars = xvars, strata = "treatment.swang", data = matched_nn, test = FALSE)
+smd_values_matched_nn <- ExtractSmd(matchedtab1_nn)
+```
+
+```{r}
 sprintf("Matched pairs: Mahalanobis = %d, glm PS = %d, random forest PS = %d (of %d treated)",
         length(greedymatch$index.treated), length(psmatch$index.treated),
         length(psmatch.rf$index.treated), sum(rhc.selected$treatment.swang))
@@ -1003,9 +1028,75 @@ sprintf("Correlation with RF propensity scores: %.3f", cor(oob.pscore.rf, pscore
 Finally, the forest's propensity scores correlate at 0.82 with those from the logistic regression. This means the two models largely agree on who was likely to be treated, which is reassuring, but they are not identical (TODO: inspect where they are different/same? like which patients the scores are more/less similar and if those patients share attributes?), so there is room for the forest's threshold-based view of the data to make a difference (#TODO what does that mean?). Whether it does is a matter of balance, so now we continue the analysis on the RF model with node size = 10, since that was the best performing model, exactly as we did on the glm model.
 
 
-#Here still need to do 4. variable importance analysis. Like try to interpret coefficients. see below for little more explanation.
+## Variable importance
 
-#Here we still need to do 5. caliper threshold analysis to try and find out if there is a certain threshold we prefer most, or if it depends on the model etc.
+The glm and the forest agree fairly well on who gets treated, but do they agree on why? For the glm we cannot simply compare the raw coefficients, because a coefficient is per unit of its variable (one year of age versus one point of APACHE score versus a 0/1 indicator), so instead we use the absolute z-value (coefficient divided by its standard error), which is scale-free and is exactly what the p-value in summary(psmodel) is based on. For the forest we use the mean decrease in Gini impurity, i.e. how much splitting on a variable improved the purity of the treated/untreated mix, summed over every split in every tree. The two measures are on completely different scales, so we compare ranks rather than values.
+
+```{r}
+glm.abs.z <- abs(summary(psmodel)$coefficients[-1, "z value"]) # [-1] drops the intercept
+rf.gini   <- importance(rf.model)[, "MeanDecreaseGini"]
+
+importance.comparison <- data.frame(glm.abs.z = round(glm.abs.z[xvars], 2),
+                                    rf.gini   = round(rf.gini[xvars], 1))
+importance.comparison$glm.rank <- rank(-importance.comparison$glm.abs.z) # rank 1 = most important
+importance.comparison$rf.rank  <- rank(-importance.comparison$rf.gini)
+print(importance.comparison[order(importance.comparison$rf.rank), ])
+
+sprintf("Spearman rank correlation between glm and random forest importance: %.2f",
+        cor(importance.comparison$glm.abs.z, importance.comparison$rf.gini, method = "spearman"))
+varImpPlot(rf.model, n.var = 15, main = "Random forest variable importance (top 15)")
+```
+
+The rank correlation tells us to what degree the two models look at the same variables: a value near 1 would mean they weigh the covariates in the same order, a value near 0 that they have found different stories in the data. The rows where the ranks diverge the most are the interesting ones. One caveat has to be kept in mind before reading too much into them: Gini importance is biased towards continuous variables, because a variable like meanbp1 or age offers a tree hundreds of candidate cutoffs whereas a 0/1 indicator like dnr1 offers exactly one, so the forest will naturally rank the continuous physiological measurements above the binary history and category variables even when they carry comparable information. A variable that the forest ranks high but the glm ranks low, and that is not simply continuous, is therefore the best candidate for a threshold or interaction effect that the additive glm cannot express. Since the balance after matching was nonetheless slightly better for the glm, whatever extra structure the forest picked up did not translate into a better propensity score, which is the same conclusion as before seen from the other side.
+
+
+## Caliper width
+
+Throughout the assignment we matched with a caliper of 0.2 standard deviations of the logit of the propensity score, which is the width recommended by Austin (2011), but we never checked whether that choice mattered. The caliper is the knob that sets the bias-variance tradeoff of matching directly: a narrow caliper only accepts close matches, so the matched groups are well balanced (low bias), but more treated patients are left without a match, so the estimate is based on fewer pairs (high variance) and, more subtly, on a different group of patients than the full treated population. A wide caliper keeps nearly all treated patients but accepts poorer matches, so the imbalance creeps back in. Below we repeat the matching for a range of calipers, for both the glm and the random forest propensity score, and record the number of pairs, the balance and the resulting effect estimate.
+
+```{r}
+calipers <- c(0.05, 0.1, 0.2, 0.5, 1, 2)
+logits.rf <- logit(pmin(pmax(oob.pscore.rf, 0.005), 0.995)) # clipped as before
+caliper.comparison <- data.frame()
+
+for (cal in calipers) {
+  for (model in c("glm", "rf")) {
+    set.seed(42)
+    mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = if (model == "glm") logits else logits.rf,
+                replace = FALSE, Weight = 2, caliper = cal)
+    md  <- rhc.selected[unlist(mt[c("index.treated", "index.control")]), ]
+    smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE))
+    y.t <- md$outcome.died[md$treatment.swang == 1]
+    y.c <- md$outcome.died[md$treatment.swang == 0]
+
+    caliper.comparison <- rbind(caliper.comparison, data.frame(
+      model          = model,
+      caliper        = cal,
+      matched.pairs  = length(mt$index.treated),
+      max.smd        = round(max(smd), 3),
+      n.smd.over.0.1 = sum(smd > 0.1),
+      mean.diff      = round(mean(y.t - y.c), 3),
+      OR             = round(exp(coef(glm(outcome.died ~ treatment.swang, family = binomial, data = md))["treatment.swang"]), 3)))
+  }
+}
+print(caliper.comparison, row.names = FALSE)
+
+# Variance side of the tradeoff: how many pairs survive each caliper
+ggplot(caliper.comparison, aes(x = caliper, y = matched.pairs, colour = model)) +
+  geom_line() + geom_point() + scale_x_log10() +
+  labs(x = "caliper (SD of logit PS, log scale)", y = "matched pairs", title = "Matched pairs kept vs caliper width") +
+  theme_minimal()
+
+# Bias side of the tradeoff: how far the worst variable drifts out of balance
+ggplot(caliper.comparison, aes(x = caliper, y = max.smd, colour = model)) +
+  geom_line() + geom_point() + scale_x_log10() +
+  geom_hline(yintercept = 0.1, linetype = "dashed") +
+  labs(x = "caliper (SD of logit PS, log scale)", y = "max SMD", title = "Worst-variable SMD vs caliper width") +
+  theme_minimal()
+```
+
+The two plots are the bias-variance tradeoff drawn out: the number of pairs rises with the caliper while the maximum SMD rises with it too, and the question is where the curves cross the point of diminishing returns. The sensible choice is the widest caliper that still keeps every variable under the dashed 0.1 line, since beyond that we are buying pairs with imbalance, and before that we are throwing away pairs without gaining balance. The effect estimates in the table are the practical check: if the odds ratio wanders as the caliper changes, the conclusion depends on a tuning choice, which is a warning sign, whereas a stable odds ratio across the reasonable range means the result is robust to it. Comparing the two models on the same grid shows whether the caliper interacts with the propensity model: the forest's scores are coarser (a fraction of 500 votes rather than a smooth probability), so the same caliper covers a different number of candidate controls than for the glm, and the forest therefore tends to lose pairs faster as the caliper narrows.
+
 
 
 #Do Partial dependence plots and IPW on friday only if we have time.
@@ -1020,8 +1111,8 @@ Finally, the forest's propensity scores correlate at 0.82 with those from the lo
 2. Tune hyperparams based on the best balance(e.g. lowest max SMD/fewest variables over 0.1) since that is in the end what we care about, not the propensity prediction accuracy. 
 3. do the t-test/mcnemar test/ glm test to see if treatment explains outcome in each of the three models and compare p-values etc. like in closed part roughly.
 
-4. Variable importance analysis. For GLM (coefficient magnitudes/p-values), RF (important() and varImpPlot(), read claude about it.) (and if possible to some extent NN), do the two models agree on which variables matter most for predicting treatment? If they diverge substantially, that's an interesting, reportable finding (e.g., maybe the forest picks up a variable that's important only in combination with others — nonlinear/interaction effects — that the additive glm can't see)
-5. Caliper threshold analysis, show bias/variance tradeoff
+4. DONE (see "Variable importance" section above). Variable importance analysis. For GLM (coefficient magnitudes/p-values), RF (important() and varImpPlot(), read claude about it.) (and if possible to some extent NN), do the two models agree on which variables matter most for predicting treatment? If they diverge substantially, that's an interesting, reportable finding (e.g., maybe the forest picks up a variable that's important only in combination with others — nonlinear/interaction effects — that the additive glm can't see)
+5. DONE (see "Caliper width" section above). Caliper threshold analysis, show bias/variance tradeoff
 
 6. Do correlation analysis between propensity scores of the 4 methods? Not completely sure what this brings us but if we can make a nice story around it I think it's good to add. 
 
@@ -1038,4 +1129,6 @@ What I meant by "even though the matching/balance results didn't confirm it" / "
 
 
 #References
+Austin, P. C. (2011). Optimal caliper widths for propensity-score matching when estimating differences in means and differences in proportions in observational studies. Pharmaceutical Statistics, 10(2), 150-161.
+
 Imai, K., & Ratkovic, M. (2014). Covariate balancing propensity score. Journal of the Royal Statistical Society Series B: Statistical Methodology, 76(1), 243-263.
