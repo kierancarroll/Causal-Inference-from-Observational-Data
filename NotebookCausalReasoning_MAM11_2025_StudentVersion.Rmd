@@ -12,10 +12,12 @@ What should you submit? You need to submit:
 2. The Notebook in html format with all the results.
 
 Please provide information about your group:
-==> Student names: 
-==> Student numbers:
+==> Student names: Kieran Carroll, Hugo Sokołowski-Katzer, Isa Oxenaar
+==> Student numbers: 16503120, 1534349, xxx
 
-#TODO: names, student numbers and disclaimer that all em dashes used were human written haha?
+#TODO: names, student numbers and disclaimer that all em dashes used were human written haha. LLm usage disclose anywhere?
+*Note that the set.seed(42) is run in many cells, to ensure reproducibility of results even if cells are not run in order all the time.
+
 
 # Closed part (70% of the grade)
 
@@ -489,21 +491,21 @@ print("===================================================")
 ```
 
 # Now it is time to check the positivity assumption
-# let's check the overlap between the propensity scores for the two groups. We do that before the matching.
+# let's check the overlap/positivity between the propensity scores for the two groups. We do that before the matching.
 ```{r}
 print("===================================================")
-#  => plot the density of the propensity scores of the treated and untreated. Tip: you might want to use par(mfrow=c(2,1)) to create 2 panels (2 rows, 1 column) and then plotting the first hist (histogram), with say, ylim=c(0,650) and col='darkblue', and the second histogram with ylim=c(650, 0) (note that we flipped the order) and col='darkblue'. This will plot the blue histogram as a normal histogram and the red one will be plotted upside down underneath the blue one so you can easily see the overlap.
+#  => plot the density of the propensity scores of the treated and untreated. Tip: you might want to use par(mfrow=c(2,1)) to create 2 panels (2 rows, 1 column) and then plotting the first hist (histogram), with say, ylim=c(0,650) and col='darkblue', and the second histogram with ylim=c(650, 0) (note that we flipped the order) and col='darkblue'. This will plot the blue histogram as a normal histogram and the red one will be plotted upside down underneath the blue one so you can easily see the overlap/positivity.
 
 
 brks <- seq(0, 1, 0.05)
 ymax <- max(hist(pscore, breaks = brks, plot = FALSE)$counts)
 #Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
 hist(pscore[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
-     xlab = "Propensity score", main = "Propensity score distribution in treated vs untreated groups.", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap them nicely
-hist(pscore[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlapping histogram
+     xlab = "Propensity score", main = "Propensity score distribution in treated vs untreated groups.", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
 
-# => What do you think about the overlap? 
-# Across most of the range of propensity scores there is substantial overlap (between 0.1 and 0.8), there exist comparable treated and untreated subjects to match at most points along the score. Only below 0.1 and between 0.8-0.9, there is little overlap, indicating a possible positivity violation in those small regions, which risks no valid comparison and thus few matches in those regions (since we will be using a caliper to ensure we avoid poor, distant matches). However, since this is real RHC data, we expected this decent but imperfect overlap in the tails, since, as we observed before, there simply are significantly more deaths (and thus higher propensity scores) in the treated group. In conclusion, the positivity assumption is okay here, but we note a possible limitation in the tails.
+# => What do you think about the overlap/positivity? 
+# Across most of the range of propensity scores there is substantial overlap/positivity (between 0.1 and 0.8), there exist comparable treated and untreated subjects to match at most points along the score. Only below 0.1 and between 0.8-0.9, there is little overlap/positivity, indicating a possible positivity violation in those small regions, which risks no valid comparison and thus few matches in those regions (since we will be using a caliper to ensure we avoid poor, distant matches). However, since this is real RHC data, we expected this decent but imperfect overlap/positivity in the tails, since, as we observed before, there simply are significantly more deaths (and thus higher propensity scores) in the treated group. In conclusion, the positivity assumption is okay here, but we note a possible limitation in the tails.
 
 
 print("===================================================")
@@ -651,28 +653,32 @@ Instead of the glm to calculate the propensity score use any machine learning te
 
 ```{r}
 #Installing and loading required packages. Can comment installation lines out after ran once.
-install.packages("randomForest")
-install.packages("caret")
-install.packages("data.table") # reinstall into the user library: the system copy was built for an older R and fails to load (undefined symbol SETLENGTH), which breaks library(caret)
-install.packages("pROC")
-install.packages("CBPS")
-install.packages("ggplot2")
-install.packages("nnet")
+# install.packages("randomForest")
+# install.packages("caret")
+# install.packages("data.table") # reinstall into the user library: the system copy was built for an older R and fails to load (undefined symbol SETLENGTH), which breaks library(caret)
+# install.packages("pROC")
+# install.packages("CBPS")
+# install.packages("ggplot2")
+# install.packages("nnet")
+# install.packages("corrplot")
+# install.packages("survey")
 library(CBPS)
 library(randomForest)
 library(pROC)
 library(caret)
 library(ggplot2)
 library(nnet)
+library(corrplot)
+library(survey)
 ```
 
 
 So far we have compared the Mahalanobis distance and propensity score, with the latter coming in as the strong favourite due to its more comprehensive nature - in the end encoding within it more information than the euclidian distance matching could. However we still have the case of machine learning models. As a group we have decided to try multiple approaches and compare our findings and results between them, looking at different performance metrics and characteristics. 
 
 
-We decided to compare a random forest (RF), a neural network, and covariate balanced propensity score (CBPS) against the standard glm because each represents a genuinely different strategy for estimating the propensity score, and together they probe different weaknesses of the baseline logistic model. The glm assumes a strictly additive relationship, that is linear in the log odds, between covariates and treatment — a strong, potentially wrong assumption we take simply based on faith. Random forest relaxes this assumption by learning through hierarchical thresholds rather than smooth linear terms, closer to how clinical decisions are actually made (a lab value crossing a cutoff, not a proportional risk score), and is able to capture nonlinearities and interactions that the standard glm isn't able to express. On the otherhand, the neural network gives a different kind of flexibility again; it is a smooth, continuous function approximator that can, in principle, capture arbitrary nonlinear relationships (including interactions) without the discrete splits a tree is restricted to. However, as a result, it is far less interpretable and more sensitive to tuning and preprocessing. CBPS (Imai & Ratkovic, 2014) is different from the other two: rather than adding flexibility to the functional form, it keeps the same linear logistic form as the glm but changes directly what the model is optimized for (adds constraints to the loss). This explicitly targets covariate balance in its fitting procedure rather than optimizing predictive likelihood alone. Testing all four side by side lets us separate distinct questions that are usually mixed up: does a more flexible/powerful functional form produce a better propensity score (RF, NN vs. glm), if so, does that produce better balanced covariate groups, and does optimizing directly for the right objective matter more than model flexibility at all (CBPS vs. glm)?
+We decided to compare a random forest (RF), a neural network, and covariate balanced propensity score (CBPS) against the standard glm because each represents a genuinely different strategy for estimating the propensity score, and together they probe different weaknesses of the baseline logistic model. The glm assumes a strictly additive relationship, that is linear in the log odds, between covariates and treatment — a strong, potentially wrong assumption we take simply based on faith. Random forest relaxes this assumption by learning through hierarchical thresholds rather than smooth linear terms, closer to how clinical decisions are actually made (a lab value crossing a cutoff, not a proportional risk score), and is able to capture nonlinearities and interactions that the standard glm isn't able to express. On the otherhand, the neural network gives a different kind of flexibility again; it is a smooth, continuous function approximator that can, in principle, capture arbitrary nonlinear relationships (including interactions) without the discrete splits a tree is restricted to. However, as a result, it is far less interpretable and more sensitive to tuning and preprocessing. Lastly, CBPS (Imai & Ratkovic, 2014) is different from the other two: rather than adding flexibility to the functional form, it keeps the same linear logistic form as the glm but changes directly what the model is optimized for (adds constraints to the loss). This explicitly targets covariate balance in its fitting procedure rather than optimizing predictive likelihood alone. Testing all four side by side lets us separate distinct questions that are usually mixed up: does a more flexible/powerful functional form produce a better propensity score (RF, NN vs. glm), if so, does that produce better balanced covariate groups, and does optimizing directly for the right objective matter more than model flexibility at all (CBPS vs. glm)?
 
-As a first optimization step and comparison between models, we will be finetuning some of the hyperparameters of the RF and NN models to optimize for covariate balance. Very important here is to emphasize the difference between propensity score predictive power and ability to create well-balanced covariate groups. The actual downstream of the propensity scores is to use them to create well balanced groups, not to perfectly classify each patient as treated/not treated. These two goals are related but not the same, and can actively conflict (e.g. a model that predicts treatment too well tends to push scores toward 0 and 1 (near-certain predictions), which destroys overlap/positivity). Maybe a model that is (slightly) overfitted balances better because it moves the propensity scores away from 0/1 and more towards the middle values which we results in more overlap and better positivity. Therefore, we optimize hyperparameters based on how well they balance the covariates by for each combination of hyperparameters look at the max SMD score, and the number of variables that have below 0.1, between 0.1-0.2 and over 0.2 SMD scores respectively.Note that for the baseline GLM and CBPS models there is no hyperparameter to do, since they essentially have fixed capacity once the formula/functional form is fixed. We will, however, investigate the addition of interaction terms in those two models. 
+As a first optimization step and comparison between models, we will be finetuning some of the hyperparameters of the RF and NN models to optimize for covariate balance. Very important here is to emphasize the difference between propensity score predictive power and ability to create well-balanced covariate groups. The actual downstream of the propensity scores is to use them to create well balanced groups, not to perfectly classify each patient as treated/not treated. These two goals are related but not the same, and can actively conflict (e.g. a model that predicts treatment too well tends to push scores toward 0 and 1 (near-certain predictions), which destroys overlap/positivity). Maybe a model that is (slightly) overfitted balances better because it moves the propensity scores away from 0/1 and more towards the middle values which we results in more overlap/positivity and better positivity. Therefore, we optimize hyperparameters based on how well they balance the covariates by for each combination of hyperparameters look at the max SMD score, and the number of variables that have below 0.1, between 0.1-0.2 and over 0.2 SMD scores respectively.Note that for the baseline GLM and CBPS models there is no hyperparameter to do, since they essentially have fixed capacity once the formula/functional form is fixed. We will, however, investigate the addition of interaction terms in those two models. 
 
 First up is Random Forest. It was primarily chosen due to its simplicity; it is often the classic first choice when ML is in the conversation, it may not have stellar results compared to other methods but it is steady, reliable and relatively interpretable. An interesting concept that came to mind (only a theory at this point, yet to be proven or disproven later in this chapter) is that of continuous vs discrete values. You see our previous two metrics, particularly PS is a continuous value, which works perfectly fine, but in the medical field our decisions are rarely motivated by proportions, but rather by thresholds. A patient is not "62% hypertensive", but rather a certain blood pressure threshold triggers treatment. Clinical reasoning can be observed as a sequence of cutoff points, which coincidentally is the precise mechanism a decision tree, and by extension - Random Forest, operates with.
 Whether this structural resemblance translates into better estimates, is what we set out to test in this next section.
@@ -692,11 +698,12 @@ print(rf.model)
 plot(rf.model)
 
 ```
-We started with the default of 500 trees in the RF. Adding more trees never hurts the result, but adds compute time, and also by plotting rf.model we can see that the probabilities even out and are stable well before the 500 mark, suggesting that upping the number is not necessary. As such, from here on we only use 300 trees.
-The two main diasl we have are node size and the number of variables randomly considered as candidates at each split. Node size is the minimum number of patients allowed in a leaf. Its default is 1, meaning a tree keeps splitting until every leaf is pure, so in the limit each leaf is essentially one patient and the tree has memorized the training data. Our starting idea was that this would be bad for a propensity score: a leaf that has memorized a single patient can only ever say "treated" or "not treated", so we expected the scores to pile up at 0 and 1, which would give infinite logits and destroy the overlap we need for matching. Forcing larger leaves seemed like the natural fix, since a leaf of 25 patients has to base its vote on a mix of treated and untreated cases rather than on a single one, and we expected that to produce smoother scores and better overlap. We therefore chose node size = 25 as a starting point, large enough to stop memorization but small enough that the trees can still tell patients apart. Secondly, the default for the number of variables randomly considered as candidates at each split is sqrt(number of predictors), so ~ sqrt(40) which is roughly 6 here. A lower number of possible variables increases randomness and thus decorrelation between trees, which makes them less prone to overfitting but individually have weaker predictive power. A larger number of possible variables make the trees more similar to each other and more powerful, but also more prone to overfitting. To test this reasoning and find out which values are optimal for balancing, we test it. 
+The final forest reports an out-of-bag error of 28.9%, against a no-information majority-vote baseline of 38.1% (the share of treated patients), so it has learned about who gets a catheter but is far from certain about it. The confusion matrix (see above) shows that this uncertainty is one-sided: 86% ((1-0.1368629) * 100) of untreated patients are classified correctly but only 46%  ((1-0.5366300) * 100) of treated ones. That is the majority class effect again, a patient is only labelled "treated" if more than half the trees vote for it, and with 62% of patients the tree is biased that way. However, note that we don't use the 0.5 cut-off, rather we use the vote fraction itself as the propensity score. Again, it is important to state that perfect prediction would be bad, since it would mean treated and untreated patients do not overlap/positivity and cannot be matched. The error plot shows the out-of-bag error (black) settling by around 150 trees and staying flat to 500, with the two class errors (red for untreated, green for treated) doing the same, which confirms that 500 trees is plenty. We started with the default of 500 trees in the RF. Adding more trees never hurts the result, but adds compute time, and also by plotting rf.model we can see that the probabilities even out and are stable well before the 500 mark, suggesting that upping the number is not necessary. As such, from here on we only use 300 trees.
+
+The two main dials we have are node size and the number of variables randomly considered as candidates at each split. Node size is the minimum number of patients allowed in a leaf. Its default is 1, meaning a tree keeps splitting until every leaf is pure, so in the limit each leaf is essentially one patient and the tree has memorized the training data. Our starting idea was that this would be bad for a propensity score: a leaf that has memorized a single patient can only ever say "treated" or "not treated", so we expected the scores to pile up at 0 and 1, which would give infinite logits and destroy the overlap/positivity we need for matching. Forcing larger leaves seemed like the natural fix, since a leaf of 25 patients has to base its vote on a mix of treated and untreated cases rather than on a single one, and we expected that to produce smoother scores and better overlap/positivity. We therefore chose node size = 25 as a starting point, large enough to stop memorization but small enough that the trees can still tell patients apart. Secondly, the default for the number of variables randomly considered as candidates at each split is sqrt(number of predictors), so ~ sqrt(40) which is roughly 6 here. A lower number of possible variables increases randomness and thus decorrelation between trees, which makes them less prone to overfitting but individually have weaker predictive power. Since it brings the propensity scores closer, we suspect better overlap/positivity and consequently better matching, and therefore expect lower mtry values (4/6) to perform better balancing. A larger number of possible variables make the trees more similar to each other and more powerful, but also more prone to overfitting. To test this reasoning and find out which values are optimal for balancing, we test it. 
 
 
-For each of several node size values and number of randomly selected candidate variables we fit a forest, take its propensity scores, and run exactly the same matching and balance check we used for the glm propensity score, so that node size is judged by the thing we actually care about: overlap in the histograms and balance after matching.
+For each of several node size values and number of randomly selected candidate variables we fit a forest, take its propensity scores, and run exactly the same matching and balance check we used for the glm propensity score, so that node size is judged by the thing we actually care about: overlap/positivity in the histograms and balance after matching. Important to note in this analysis is that initially the overlap/positivity checks were done strictly before matching. However, we believe it is better to analyze these results together, since it is not always true that overlap/positivity that seems better visually, also actually gives better balancing. On the other hand, it is also not always true that better SMD scores indicate strictly better balancing, since their might be little overlap/positivity resulting a small number of matched pairs, which is undesirable. Note that we use the number of matched pairs as a proxy for the overlap/positivity of the propensity distributions since less/more overlap/positivity results in fewer/more matched pairs when using a the standard 0.2*STD caliper, respectively. Therefore, we analyzed and reported the SMD scores together with the number of matched pairs, and also visually inspected the overlap/positivity graphs (of which a subset was printed for succinctness).
 
 
 ```{r}
@@ -704,7 +711,7 @@ nodesizes <- c(1, 5, 10, 25, 50, 100)
 mtrys <- c(2, 3, 4, 6, 10, 15)  # default for classification is floor(sqrt(n_vars) ~= 6 here, so spread around it but not useful to go lower than 3 since than you get almost entirely random splits in the trees.
 
 ps.by.combo <- list()
-nodesize.comparison <- data.frame()
+rf.comparison <- data.frame()
 
 for (ns in nodesizes) {
   for (mt.val in mtrys) {
@@ -717,7 +724,6 @@ for (ns in nodesizes) {
 
     # Scores of exactly 0 or 1 have an infinite logit, so we push them up to 0.005 or down to 0.995 to not get an error
     ps.c <- pmin(pmax(ps, 0.005), 0.995)
-    set.seed(42)  #TODO: is this needed again?
     # 1:1 greedy matching with Mahalanobis distance on the logit transformed propensity score predicted by the RF, with no replacement and a caliper of      0.2 as before so that we can accurately compare the propensity score calculation method (controlling for other hyperparameters). 
     mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(ps.c),
                 replace = FALSE, Weight = 2, caliper = 0.2)
@@ -725,13 +731,14 @@ for (ns in nodesizes) {
     smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE)) #Calculate SMD scores to check balancing
 
     # Comparison table; add 1 row of info per hyperparam combo
-    nodesize.comparison <- rbind(nodesize.comparison, data.frame(
+    rf.comparison <- rbind(rf.comparison, data.frame(
       nodesize       = ns,
       mtry           = mt.val,
       oob.error      = round(tail(m$err.rate[, "OOB"], 1), 3), #Out-of-bound error rate, i.e. held-out validation error for each full RF of 500 trees (similary to classical cross validation). Tells us how accurately predictive model is, but note that we don't want model to predict propensity scores perfectly as 0/1 since then there is bad overlap/positivity in scores. 
       extreme.scores = sum(ps < 0.01 | ps > 0.99), # patients with almost certain predictions, don't want this high since leads to unbalanced dataset (bad for positivity)
       matched.pairs  = length(mt$index.treated), # how many subjects succesfully found a caliper satisfying match (fewer = worse overlap/positivity)
       max.smd        = round(max(smd), 3), #maximum found smd (most unbalanced variable)
+      worst.var = rownames(smd)[which.max(smd)], #variable with max (worst) smd score
       n.smd.under.0.1 = sum(smd < 0.1), #number of variables well-balanced
       n.smd.0.1.0.2  = sum(smd >= 0.1 & smd <= 0.2), #number of variables in danger zone
       n.smd.over.0.2 = sum(smd > 0.2))) #number of variables not well-balanced
@@ -739,12 +746,12 @@ for (ns in nodesizes) {
 }
 # sorted so the best-balancing combos appear first
 print("Best balanced variables by max SMD value:")
-print(nodesize.comparison[order(-nodesize.comparison$max.smd), ]) 
+print(rf.comparison[order(rf.comparison$max.smd), ]) 
 print("Best balanced variables by number of variables well-balanced:")
-print(nodesize.comparison[order(-nodesize.comparison$n.smd.under.0.1), ])
+print(rf.comparison[order(-rf.comparison$n.smd.under.0.1), ])
 
 # heatmap of the balance metric to show balance results: number of variables well balanced (SMD < 0.1) and max SMD value.
-ggplot(nodesize.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = max.smd)) +
+ggplot(rf.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = max.smd)) +
   geom_tile() +
   geom_text(aes(label = max.smd), size = 3) +
   scale_fill_gradient(low = "darkgreen", high = "darkred") +
@@ -753,7 +760,7 @@ ggplot(nodesize.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = m
   theme_minimal()
 
 
-ggplot(nodesize.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = n.smd.under.0.1)) +
+ggplot(rf.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = n.smd.under.0.1)) +
   geom_tile() +
   geom_text(aes(label = n.smd.under.0.1), size = 3) +
   scale_fill_gradient(low = "darkred", high = "darkgreen") +
@@ -762,13 +769,53 @@ ggplot(nodesize.comparison, aes(x = factor(nodesize), y = factor(mtry), fill = n
   theme_minimal()
 ```
 
-These heatmaps tell a different story from the one we expected. For the node size, small values (1, 5 and 10) look best: one hump per group, both spread across roughly 0 to 0.9, and wide overlap in the middle. Larger values make things worse, and at 50 and 100 the untreated patients collapse into a spike near 0. The reason is that each tree votes for the majority class of its leaf, and with leaves of 100 patients almost every leaf is majority-untreated (62% of all patients in the entire dataset are), so the majority of trees vote "not treated" for most patients. Our worry about the forests remembering patients applied to a single tree, but the propensity score is the average vote of 500 trees grown on different bootstrap samples and different random subsets of features, and that averaging combined with the randomness already smooths the scores sufficiently. Looking at the table - nodesize 10 and 25 give the best balance (2 variables with SMD above 0.1, max SMD 0.113 and 0.115), while 50 and 100 produce many more near-certain scores (45 and 128) and worse balance (4 and 8 variables above 0.1). Nodesize 1 is slightly worse than 10 as well, so the very smallest leaves add a little noise. Between 10 and 25, nodesize 10 has fewer extreme scores (4 versus 20) and keeps more matched pairs (1672 versus 1656), so that is what we use for the final model; our starting guess of 25 was close, but not the best. Note already that even the best forest leaves two variables above 0.1, where the glm propensity score left none, a point we shall return to. Overall the choice between node count is narrower than the graphs tell at first. #TODO update paragraph. select best hyperparams that score best on those metrics but also still have high number of matched pairs since that indicates overlap/positivity (and then also show this is the case in an overlap graph)
+These heatmaps tell a different story from the one we expected. For the node size, small values (1, 5 and 10) look best: the lower maximum smd values and more variables well-balanced (smd score < 0.1). Larger values make things worse, at a node size of 50 and 100 the max smd scores rise and a lot more variables are still unbalanced (up to 7 of the 40 variables have smd score > 0.1). The reason is that each tree votes for the majority class of its leaf, and with leaves of 100 patients the leaves are significantly biased to predicting majority-untreated since 62% of all patients in the entire dataset untreated, so the majority of trees vote "not treated" for most patients, bringing the propensity scores down and worsening matching as a result. Our worry about the forests remembering patients applied to a single tree, but the propensity score is the average vote of 300 trees grown on different bootstrap samples and different random subsets of features, and that averaging combined with the randomness already smooths the scores sufficiently. This hypothesis is confirmed in the first row of the figure below, where we indeed see that the overlap/positivity of propensity scores of patients is significantly worse at larger node sizes (and the default mtry = 6) due to the collapse into a spike near 0 by the majority vote phenomenon explained above. This consequently led to worse matches and thus lower smd scores as just discussed.
+For mtry (the number of variables randomly selected as candidates at each split in a tree), we see that the best smd scores are obtained at the value of 3. Note that the default is sqrt(number of variables) = sqrt(40), which is roughly 6, so clearly in this situation the model prefers some added randomness (since fewer possible random candidate variables makes the splits less optimal and more decorrelated). A plausible explanation for this observation is that if the number of random candidate variables were higher, the splits would become more optimal, and thus the propensity scores would be predicted more accurately, possibly driving the treated patient's scores toward 1 and the control patient's scores to 0, reducing overlap/positivity and decreasing matching quality and thus balancing. Therefore, more randomness gives less optimal predictions and thus more overlap/positivity between propensity scores and consequent better balancing (better SMD metrics). Note that the overlap/positivity graphs show results in line with this. In row two of the figure below we see that higher mtry have slightly more spread out propensity values (contributing to worse matches and thus smd scores/balancing). 
+
+Thus, looking at the table and heatmaps the combinations of nodesize 10 and mtry values 3 gives the best balance (0 variables with SMD above 0.1, max SMD 0.094), and the number of matched pairs is relatively good as well (roughly 1660) so that is what we use for the final random forest model. In the graph below we can observe that this configuration still leeds to good balancing; one hump per group, both spread across roughly 0 to 0.9, and wide overlap/positivity in the middle. This turned out to be practially the best overlap/positivity present in any of the configurations, and have the best balanced groups. Our starting guess of node size 25 and mtry 4/6 was close, but not the best.
+
+```{r}
+par(mfrow = c(2, 2))
+
+pscore.rf <- pmin(pmax(ps.by.combo[["ns100_mtry6"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.rf, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.rf[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "ns = 100, mtry = 6", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.rf[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.rf <- pmin(pmax(ps.by.combo[["ns10_mtry6"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.rf, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.rf[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "ns = 10, mtry = 6", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.rf[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
 
 
+pscore.rf <- pmin(pmax(ps.by.combo[["ns10_mtry3"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.rf, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.rf[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "ns = 10, mtry = 3", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.rf[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
 
-Next up is the neural network. As discussed before, random forests reason through discrete, threshold-based splits, while a a neural network offers the opposite kind of flexibility: a smooth, continuous function of the covariates, fit through gradient-based optimization rather than recursive partitioning. Since this let's us capture nonlinear relationships and interactions between covariates without being restricted to axis-aligned splits, we expect this to be able to optimize any goal relatively well. However, since this is a very powerful model, we need to ensure careful preprocessing (standardizing  numerically encoded inputs) and use regularization to avoid overfitting on a such a tiny dataset. As with random forest, we tune the most important hyperparameters: capacity (hidden layer size) and regularization strength (weight decay). However, again, following our own critique of predictive-accuracy-driven tuning, we select them based on the balance they produce after matching, not on how well they predict treatment assignment.
+pscore.rf <- pmin(pmax(ps.by.combo[["ns10_mtry15"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.rf, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.rf[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "ns = 10, mtry = 15", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.rf[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
 
 
+par(mfrow = c(1, 1))
+```
+
+
+Next up is the neural network. As discussed before, random forests reason through discrete, threshold-based splits, while a a neural network offers the opposite kind of flexibility: a smooth, continuous function of the covariates, fit through gradient-based optimization rather than recursive partitioning. Since this let's us capture nonlinear relationships and interactions between covariates without being restricted to axis-aligned splits, we expect this to be able to optimize any goal relatively well. However, since this is a very powerful model, we need to ensure careful preprocessing (standardizing  numerically encoded inputs) and use regularization to avoid overfitting on a such a tiny dataset. As with random forest, we tune the most important hyperparameters: capacity (hidden layer size) and regularization strength (weight decay). However, again, following our own critique of predictive-accuracy-driven tuning, we select them based on the balance they produce after matching, not on how well they predict treatment assignment. We expect the model configuration that predicts the propensity scores well, but not too well, to have the best results since this will create seperated but still overlapping propensity scores, allowing for good balancing of the groups.
 
 
 ```{r}
@@ -785,7 +832,7 @@ X.scaled <- predict(preproc, X.raw)
 
 nn.df <- data.frame(X.scaled, treatment.swang = nn.data$treatment.swang)
 
-grid <- expand.grid(size  = c(2, 4, 6, 8, 12),            # number of hidden units
+grid <- expand.grid(size  = c(1, 2, 4, 6, 8, 12),            # number of hidden units
                      decay = c(0, 0.001, 0.01, 0.1, 0.5))  # L2 regularization strength
 
 ps.by.combo.nn <- list()
@@ -804,7 +851,6 @@ for (i in 1:nrow(grid)) { #loop over grid of hyperparams
 
   # Scores of exactly 0 or 1 have an infinite logit, so we clip them
   ps.c <- pmin(pmax(ps, 0.005), 0.995)
-  set.seed(42)
   #Identical matching and SMD calculation steps as before
   mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(ps.c),
               replace = FALSE, Weight = 2, caliper = 0.2)
@@ -818,12 +864,12 @@ for (i in 1:nrow(grid)) { #loop over grid of hyperparams
     extreme.scores  = sum(ps < 0.01 | ps > 0.99),
     matched.pairs   = length(mt$index.treated),
     max.smd         = round(max(smd), 3),
+    worst.var = rownames(smd)[which.max(smd)], 
     n.smd.under.0.1 = sum(smd < 0.1), 
     n.smd.0.1.0.2  = sum(smd >= 0.1 & smd <= 0.2), 
     n.smd.over.0.2 = sum(smd > 0.2)))
 }
 
-# 
 print("Best balanced combos by max SMD value:")
 print(nn.comparison[order(nn.comparison$max.smd), ])   #ascending: lowest (best) max SMD first
 
@@ -847,13 +893,146 @@ ggplot(nn.comparison, aes(x = factor(size), y = factor(decay), fill = n.smd.unde
        title = "NN balance (variables with SMD < 0.1) across size x decay grid") +
   theme_minimal()
 ```
-#TODO update paragraph. select best hyperparams that score best on those metrics but also still have high number of matched pairs since that indicates overlap/positivity (and then also show this is the case in an overlap graph)
+Interestingly, what stands out at first hand are the amazing smd scores. Almost all hyperparameter combinations have all variables with an SMD score below 0.1, and the maximum SMD scores are very below (mostly between 0.04-0.08). This is significantly better than the SMD metrics of the RF models. However we shouldn't get too excited, since when looking at the number of matched pairs we quicky observe that the number of matched pairs is siginicantly lower (a lot between 900-1400) than in the RF models (1650-1700). This means that as much as half of the treated patients (2184 total) are thrown away during matching, which consequently means a smaller effective sample for the final outcome analysis (t-test, McNemar, logistic regression) , and thus wider confidence intervals, noisier estimates and less power to detect a real effect. Moreover, as explained before, matching estimates the ATT, the effect for the treated population. So, if a caliper throws away too many treated patients, then the estimate no longer represents the effect for all treated patients, but only the effect for the subset of treated patients who happened to be easy to match. That subset may not be representative, e.g. if the dropped patients are systematically different (they likely have more extreme propensity scores, meaning the least/most severely ill), then the ATT estimate is silently shifted toward a different, making the conclusions/finding less generalizable.
 
+
+However, the SMD balancing metrics do seem to go hand-in-hand with the amount of overlap/positivity (see the graphs below for a representable subset of the propensity distributions across neural network settings) / the number of matched pairs (see tables above). In the graphs below we can clearly see a trend that the higher the lower the layer size (more so than decay magnitude), the more overlap there is (and thus consequently more matched pairs as seen in the tables above). Notably, the SMD results seem to follow a similar trend. In the heatmaps we can clearly see that the smaller models, as well as the more regularized models (larger weight decay) have better SMD metrics (all variables below 0.1 and smaller max SMD), and that in addition to the more matches we just noted. This can be explained by the fact that, as stated earlier, the dataset is very small and the prediction task at hand fairly simple, thus the model quickly becomes too powerfull, in the sense that it is able to predict the propensity scores too well (towards 0 and 1 for control/treated respectively, as can be very well seen in the graphs below for size = 12), which leads to very little overlap and thus very few & poor matches and thus bad balancing. A smaller model as well as a more regularized model, can predict and thus spread out the propensity scores less well, leading to more overlap and consequently better matching. The model has very similar (near optimal) SMD metrics for hidden sizes 1 and 2 (max smd of 0.041 vs 0.04), however, we do note in the second set of overlap/positivity graphs below that the model with hidden size = 1 has significantly better overlap which lead to approximately 100 more matches (approximatelty 1600-1650 vs. 1700-1750 as seen in the table above). Therefore, for our final model we choose the configuration of a hidden layer size of 1 and weight decay of 0.01 (most matches at 1743 AND best max smd score). 
+
+
+```{r}
+par(mfrow = c(3, 3))
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0.1"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0.1", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0.001"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0.001", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size6_decay0.1"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 6, decay = 0.1", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size6_decay0.001"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 6, decay = 0.100", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size6_decay0"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 6, decay = 0", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size12_decay0.1"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 12, decay = 0.1", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size12_decay0.001"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 12, decay = 0.001", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size12_decay0"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 12, decay = 0", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+par(mfrow = c(1, 1))
+
+
+par(mfrow = c(2, 3))
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size1_decay0.1"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 1, decay = 0.1", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size1_decay0.001"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 1, decay = 0.001", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size1_decay0"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 1, decay = 0", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0.1"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0.1", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0.001"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0.001", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size2_decay0"]], 0.005), 0.995)
+brks <- seq(0, 1, 0.05)
+ymax <- max(hist(pscore.nn, breaks = brks, plot = FALSE)$counts)
+#Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
+hist(pscore.nn[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+     xlab = "Propensity score", main = "size = 2, decay = 0", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.nn[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
+
+par(mfrow = c(1, 1))
+```
 
 
 Lastly, we get to the CBPS model. As explained before, the actual goal is to create well-balanced treated vs control groups. The regular glm does not directly optimize for this since it simply fits the model to maximize the likelihood of correctly predicting treatment. Balance is never part of the fitting objective and is only measured post-hoc by checking SMD. CBPS (Imai & Ratkovic, 2014) fix this by changing directly what the model is optimizing.
 
-Instead of fitting the propensity model purely by maximum likelihood, the propensity score can be estimated in a way that maximizes a combination of covariate balance as well as the prediction accuracy. CBPS uses the same parametric logistic form (β·X) as ordinary logistic regression, but chooses β by an augmented set of estimating equations that simultaneously satisfy the usual score/likelihood conditions from logistic regression, but also force the weighted covariate means to be equal between treated and control groups. In other words, balance constraints are baked directly into the equations used to solve for β, rather than only checked afterward. The method, therefore, avoids an iteration between model fitting and balance checking. Note that in the architecture of the CBPS model, we chose to target ATT (average treatment effect on the treated) rather than ATE since in general matching builds counterfactuals for only the treated group so all our estimates in this entire assignment have been estimating ATT and not ATE. Moreover, we use the "exact" method to ensure covariate means are matched exactly between groups.
+Instead of fitting the propensity model purely by maximum likelihood, the propensity score can be estimated in a way that maximizes a combination of covariate balance as well as the propensity prediction accuracy. CBPS uses the same parametric logistic form as ordinary logistic regression, but chooses the parameters by an augmented set of estimating equations that simultaneously satisfy the usual score/likelihood conditions from logistic regression, but also force the weighted covariate means to be equal between treated and control groups. In other words, balancing constraints are directly incorporated into the equations used to solve for the parameters, rather than only checked afterward. The method, therefore, avoids an iteration between model fitting and balance checking. Note that in the architecture of the CBPS model, we chose to target ATT (average treatment effect on the treated) rather than ATE since in general matching builds counterfactuals for only the treated group so all our estimates in this entire assignment have been estimating ATT and not ATE. Moreover, we use the "exact" method to ensure covariate means are matched exactly between groups.
 
 ```{r}
 cbps.model <- CBPS(treatment.swang ~ ., data = rhc.selected[, c(xvars, "treatment.swang")],
@@ -866,8 +1045,8 @@ brks <- seq(0, 1, 0.05)
 ymax <- max(hist(pscore.cbps, breaks = brks, plot = FALSE)$counts)
 #Plot propensity score frequencies for treated and untreated groups to check for overlap/positivity
 hist(pscore.cbps[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
-     xlab = "Propensity score", main = "Propensity score distribution in treated vs untreated groups.", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap them nicely
-hist(pscore.cbps[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlapping histogram
+     xlab = "Propensity score", main = "Propensity score distribution in treated vs untreated groups.", ylim = c(0, ymax)) #Use transparansy of 0.6/0.5 to overlap/positivity them nicely
+hist(pscore.cbps[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE) #Add to previous histogram to merge them into one overlap/positivityping histogram
 
 
 logits.cbps <- logit(pscore.cbps.c)
@@ -888,77 +1067,100 @@ sprintf("0.1 <= SMD < 0.2: %d variables", sum(smd_values_matched_cbps >= 0.1 & s
 sprintf("SMD > 0.2: %d variables", sum(smd_values_matched_cbps > 0.2))
 
 ```
-
-#TODO write conclusion paragraph.
-
+The results above show promising results. First of all, the overlap/positivity seems okay; both groups have their own slight peak but their is sufficient overlap present across a wide range from 0.1-0.9, which is confirmed by the relatively large number of matches at 1733. Moreover, the SMD balancing metrics are very positive, as all 40 variables scored below 0.1, and the max SMD even is 0.058. Overall, this means that this method, which bakes balancing directly into its optimization equations, indeed succeeds well at balancing the two groups across the covariates, while keeping a good sample size for the downstream effect analysis. 
 
 
-# Here we define our best performing model for each of the 2 finetuned methods and then continue with the rest of the analysis.
-# Then, compare the number of matched pairs and balancing (through max SMD score, and number of variables below 0.1, between 0.1-0.2 and over 0.2 respecitvely). below is some code from before that can be used for this.
+# Now, we compare the number of matched pairs and balancing (through max SMD score, and number of variables below 0.1, between 0.1-0.2 and over 0.2 respecitvely) between each of the 5 methods. Below we report these metrics, as well as their propensity overlap/positivity graphs for the 4 propensity-based methods one more time for convenience.
+
+Now that we have looked at all 5 methods seperately, and chose the best models for the two methods that required hyperparameter optimization (RF & NN). We can compare the balancing performance methods between the different methods. Below the overlap/positivity graphs of the 4 propensity-based methods are shown, as well as the number of matching pairs and SMD metrics for all 5 methods. The intial matching based on the Mahalanobis distance of the covariate directly used no caliper (as per instructions), therefore it matched all treated subjects (2184), which is a plus since it keeps the sample size as large as possible for the downstream final outcome analysis in the next part. However, to obtain comparable results, we performed greedy matching also with the 0.2 caliper (see below), which resulted in 0 matches. This means that not a single treated subject could find a control patient where each of the covariate values were at least 0.2 standardized units apart. This shows that yes it is evident that the greedy matching produces far less good matches compared to the other methods (as we will also see in the SMD metrics next). However, it might also suggest that the default 0.2 standardized units caliper might be a too strict metric in a high number of dimensions. It requires the mean of each of the 40 variables to be less than 0.2 standardized units away, possibly throwing away good potential matches that might be just too far away in one or a couple of the 40 dimensions. We will return to this and analyze it later when doing a caliper sensitivity analysis. Looking at the other methods in the table, we see much better number of matches. The GLM, NN and CPS all have a roughly equal number of matches (1730-1740), while the RF has a (slightly) lower number of matches (1659), of the total 2184 treated patients. When looking at the overlap graphs, we do see that the NN has a bit worse overlap than the rest, which can be explained by its enormous power and flexibility to produce very accurate propensity predicitions as we discussed before. However, overall the overlap/positivity assumption seems valid in all four methods. Lastly, when looking at the SMD results, we clearly observe that the greedy matching performs worst, with a max SMD of 0.501, only 24 variables with a score below 0.1, and 7 variables with a score above 0.2, indicating that the groups are highly inbalanced on those covariates. The other 4 methods score roughly similar, each having a max SMD score below 0.1 (implyinh that all 40 variables are below 0.1), with the original GLM method doing as low as 0.035. Based on these results, there does not seem to be a clear winner. However, given that they perform similarly, we prefer the original GLM implementation, as the more simplistic model is more interpretable, as we can more directly interpret it's coefficients to see which variables contributed in what way to the predictions, allowing for better explainability of the model. The original clearly greedy matching model clearly underperforms in all aspects to the other models, as discussed before.
+
 ```{r}
-# Final random forest: node size 10 (chosen above), default mtry, 500 trees. Propensity score = out-of-bag vote fraction, as in the tuning grid.
+#Perform greedy matching also with the same caliper for comparable results
+greedymatch2 <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = as.matrix(rhc.selected[xvars]), 
+                      replace = FALSE, Weight = 2, caliper=0.2)
+if (!is.list(greedymatch2) || is.null(greedymatch2$index.treated)) { #safety check to see if any matches at all
+  print("No valid matches found with greedy matching with the 0.2 caliper.")
+} else {
+  sprintf("Greedy matching has %d matches when also using a 0.2 caliper", length(greedymatch2$index.treated))
+}
+
+# Pull the RF and NN SMD summary values from their comparison tables
+rf.row <- rf.comparison[rf.comparison$nodesize == 10 & rf.comparison$mtry == 3, ]
+nn.row <- nn.comparison[nn.comparison$size == 1 & nn.comparison$decay == 0.01, ]
+
+sprintf("Matched pairs: Mahalanobis (no caliper) = %d, glm PS = %d, RF PS = %d, NN PS = %d, CBPS PS = %d (of %d treated)",
+        length(greedymatch$index.treated), length(psmatch$index.treated),
+        rf.row$matched.pairs,nn.row$matched.pairs, length(psmatch.cbps$index.treated), sum(rhc.selected$treatment.swang))
+
+sprintf("Max SMD: Mahalanobis (no caliper) = %.3f, glm PS = %.3f, RF PS = %.3f, NN PS = %.3f, CBPS PS = %.3f",
+        max(smd_values_matched), max(smd_values_matched_ps), rf.row$max.smd, nn.row$max.smd, max(smd_values_matched_cbps))
+
+sprintf("SMD < 0.1: Mahalanobis (no caliper) = %d, glm PS = %d, RF PS = %d, NN PS = %d, CBPS PS = %d",
+        sum(smd_values_matched < 0.1), sum(smd_values_matched_ps < 0.1), rf.row$n.smd.under.0.1, nn.row$n.smd.under.0.1, sum(smd_values_matched_cbps < 0.1))
+
+sprintf("0.1 <= SMD <= 0.2: Mahalanobis  (no caliper)= %d, glm PS = %d, RF PS = %d, NN PS = %d, CBPS PS = %d",
+        sum(smd_values_matched >= 0.1 & smd_values_matched <= 0.2), sum(smd_values_matched_ps >= 0.1 & smd_values_matched_ps <= 0.2), rf.row$n.smd.0.1.0.2, nn.row$n.smd.0.1.0.2, sum(smd_values_matched_cbps >= 0.1 & smd_values_matched_cbps <= 0.2))
+
+sprintf("SMD > 0.2: Mahalanobis (no caliper) = %d, glm PS = %d, RF PS = %d, NN PS = %d, CBPS PS = %d",
+        sum(smd_values_matched > 0.2), sum(smd_values_matched_ps > 0.2),
+        rf.row$n.smd.over.0.2, nn.row$n.smd.over.0.2, sum(smd_values_matched_cbps > 0.2))
+
+pscore.rf <- pmin(pmax(ps.by.combo[["ns10_mtry3"]], 0.005), 0.995)
+pscore.nn <- pmin(pmax(ps.by.combo.nn[["size1_decay0.01"]], 0.005), 0.995)
+
+par(mfrow = c(2, 2))
+pscores.list <- list(
+  "GLM"  = pscore,
+  "RF"   = pscore.rf,
+  "NN"   = pscore.nn,
+  "CBPS" = pscore.cbps
+)
+
+brks <- seq(0, 1, 0.05)
+
+for (name in names(pscores.list)) {
+  ps <- pscores.list[[name]]
+  ymax <- max(hist(ps, breaks = brks, plot = FALSE)$counts)
+  
+  hist(ps[rhc.selected$treatment.swang == 1], breaks = brks, col = rgb(0, 0, 0.55, 0.6),
+       xlab = "Propensity score", main = paste(name, "propensity score overlap/positivity"), ylim = c(0, ymax))
+  hist(ps[rhc.selected$treatment.swang == 0], breaks = brks, col = rgb(0.55, 0, 0, 0.5), add = TRUE)
+}
+
+par(mfrow = c(1, 1))
+```
+
+
+# Here we define our best performing model for each of the 2 finetuned methods and get their corresponding matched sets, so we can then continue with the rest of the analysis to see whether treatment significantly explains outcomes for each of the methods.
+```{r}
+# Create matched set for final random forest (node size = 10, mtry = 3 , 300 trees) for further downstream analysis.
 set.seed(42)
-rf.model  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = 10)
+# Final, best balancing Random Forest:
+rf.model  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 300, nodesize = 10, mtry = 3, importance = TRUE)
 pscore.rf <- predict(rf.model, type = "prob")[, "1"]
-set.seed(42)
 psmatch.rf <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(pmin(pmax(pscore.rf, 0.005), 0.995)),
                     replace = FALSE, Weight = 2, caliper = 0.2)
 matched_rf <- rhc.selected[unlist(psmatch.rf[c("index.treated", "index.control")]), ]
-matchedtab1_rf <- CreateTableOne(vars = xvars, strata = "treatment.swang", data = matched_rf, test = FALSE)
-smd_values_matched_rf <- ExtractSmd(matchedtab1_rf)
 
-# Final neural network: the grid combination with the most variables under SMD 0.1, ties broken by lowest max SMD and then by most matched pairs (overlap).
-best.nn <- nn.comparison[order(-nn.comparison$n.smd.under.0.1, nn.comparison$max.smd, -nn.comparison$matched.pairs), ][1, ]
-sprintf("Selected NN: size = %d, decay = %s (%d variables with SMD < 0.1, max SMD %.3f, %d matched pairs)",
-        best.nn$size, best.nn$decay, best.nn$n.smd.under.0.1, best.nn$max.smd, best.nn$matched.pairs)
-pscore.nn <- ps.by.combo.nn[[paste0("size", best.nn$size, "_decay", best.nn$decay)]] # scores already computed in the grid
-set.seed(42)
-psmatch.nn <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(pmin(pmax(pscore.nn, 0.005), 0.995)),
-                    replace = FALSE, Weight = 2, caliper = 0.2)
+
+# Create matched set for final neural network (weight decay = 0.01, hidden size = 1) for further downstream analysis.
+# Final, best balancing Neural Network:
+m <- nnet(treatment.swang ~ ., data = nn.df, size = 1, decay = 0.01,
+          trace = FALSE, maxit = 300, linout = FALSE) 
+pscore.nn <- predict(m, newdata = nn.df, type = "raw")[, 1] 
+psmatch.nn <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = logit(pmin(pmax(pscore.nn, 0.005), 0.995)), replace = FALSE, Weight = 2, caliper = 0.2)
 matched_nn <- rhc.selected[unlist(psmatch.nn[c("index.treated", "index.control")]), ]
-matchedtab1_nn <- CreateTableOne(vars = xvars, strata = "treatment.swang", data = matched_nn, test = FALSE)
-smd_values_matched_nn <- ExtractSmd(matchedtab1_nn)
-```
-
-```{r}
-sprintf("Matched pairs: Mahalanobis = %d, glm PS = %d, random forest PS = %d (of %d treated)",
-        length(greedymatch$index.treated), length(psmatch$index.treated),
-        length(psmatch.rf$index.treated), sum(rhc.selected$treatment.swang))
-# All four stages side by side
-smd.compare <- data.frame(before      = ExtractSmd(table1)[, 1],
-                          mahalanobis = ExtractSmd(matchedtab1)[, 1],
-                          ps.glm      = ExtractSmd(matchedtab1_ps)[, 1],
-                          ps.rf       = ExtractSmd(matchedtab1_rf)[, 1])
-print(round(smd.compare[order(-smd.compare$before), ], 3))
-print("Variables with SMD > 0.1:"); print(colSums(smd.compare > 0.1))
-print("Worst SMD:");                print(round(apply(smd.compare, 2, max), 3))
 ```
 
 
-# This propensity predictive value performance analysis can be included when we compare the balancing versus the performance in how well it predicts propensity scores. So basically for each of the 4 methods, perform some type of propensity prediction analysis on held-out data / cross validation and on the full training data, to measure generalization vs overfitting, and compare & contrast these results to how well they balance the groups to explane the duality we discussed before between prediction performance and how well it balances. Code below is starter for RF model that calculates AUC (can maybe calculate AUC for all 4)? This is point 8. in the list below btw.
 
-```{r}
-set.seed(42)
-#Here we redfine and fit our best performing RF model with node size = 10.
-rf.model  <- randomForest(treatment.swang ~ ., data = rf.data, ntree = 500, nodesize = 10)
-print(rf.model)
-plot(rf.model)   # out-of-bag (held-out validation) error rate against number of trees: flat long before 500
-
-oob.pscore.rf <- predict(rf.model, type = "prob")[, "1"]
-auc.oob.rf <- auc(rf.data$treatment.swang, oob.pscore.rf)
-train.pscore.rf <- predict(rf.model, newdata = rf.data, type = "prob")[, "1"]
-auc.train.rf <- auc(rf.data$treatment.swang, train.pscore.rf)
-sprintf("RF (nodesize=10): train AUC = %.3f, OOB AUC = %.3f", auc.train.rf, auc.oob.rf)
-```
-The final forest reports an out-of-bag error of 28.9%, against a no-information majority-vote baseline of 38.1% (the share of treated patients), so it has learned about who gets a catheter but is far from certain about it. The confusion matrix (see above) shows that this uncertainty is one-sided: 86% ((1-0.1368629) * 100) of untreated patients are classified correctly but only 46%  ((1-0.5366300) * 100) of treated ones. That is the majority class effect again, a patient is only labelled "treated" if more than half the trees vote for it, and with 62% of patients untreated the forest leans that way.#TODO: is that true? Howevre we dont use the 0.5 cut-off rather we use the vote fraction itself as the propensity score. A theme that echoes throughout this assignment is that perfect prediction would be bad, since it would mean treated and untreated patients do not overlap and cannot be matched. The error plot shows the out-of-bag error (black) settling by around 150 trees and staying flat to 500, with the two class errors (red for untreated, green for treated) doing the same, which confirms that 500 trees is plenty. 
-
-
-
-# Here we need to do point 3. do the t-test/mcnemar test/ glm test to see if treatment explains outcome in each of the three models and compare
-# just look at roughly what we did in the closed part and repeat that for each of the three models. It's already completed roughly for RF & NN in the code below, but not sure if we need the final effects dataframe to repeat the smd score reporting etc, since we did that before already. I think here just focus on odds ratio and p-values etc.
+#Next, we perform the downstream outcome statistical analysis for each of the three new methods. Note that even though we prefer the original GLM model for its simplicity and interpretibility, we perform the analysis for all three models for comparison anyways, since the balancing performance was very similar.
 
 ```{r}
 print("===================================================")
+set.seed(42) #For reproducibility of results
+# First for the RF:
+print("For the RF:")
 y_trt.rf <- matched_rf$outcome.died[matched_rf$treatment.swang == 1]
 y_con.rf <- matched_rf$outcome.died[matched_rf$treatment.swang == 0]
 
@@ -968,12 +1170,12 @@ mcnemar.test(table(y_trt.rf, y_con.rf))     # correct test for paired binary dat
 
 gmodel5 <- glm(outcome.died ~ treatment.swang, family = binomial, data = matched_rf)
 summary(gmodel5)
-sprintf("Odds ratio for treatment: %.4f", exp(coef(gmodel5)["treatment.swang"]))
 
 # Doubly robust: adjust for the least well balanced variable
-worst.rf <- rownames(smd_values_matched_rf)[which.max(smd_values_matched_rf)]
+worst.rf <- rf.row$worst.var
 gmodel6 <- glm(as.formula(paste("outcome.died ~ treatment.swang +", worst.rf)), family = binomial, data = matched_rf)
 summary(gmodel6)
+sprintf("Odds ratio for treatment: %.4f", exp(coef(gmodel5)["treatment.swang"]))
 sprintf("Odds ratio for treatment after adjusting for %s: %.4f", worst.rf, exp(coef(gmodel6)["treatment.swang"]))
 
 effects <- data.frame(
@@ -981,15 +1183,12 @@ effects <- data.frame(
   pairs       = c(length(greedymatch$index.treated), length(psmatch$index.treated), length(psmatch.rf$index.treated)),
   mean.diff   = c(mean(y_trt - y_con), mean(y_trt.ps - y_con.ps), mean(y_trt.rf - y_con.rf)),
   OR          = exp(c(coef(gmodel1)["treatment.swang"], coef(gmodel3)["treatment.swang"], coef(gmodel5)["treatment.swang"])),
-  OR.adjusted = exp(c(coef(gmodel2)["treatment.swang"], coef(gmodel4)["treatment.swang"], coef(gmodel6)["treatment.swang"])),
-  smd.0.1.to.0.2 = colSums(smd.compare > 0.1 & smd.compare <= 0.2)[c("mahalanobis", "ps.glm", "ps.rf")], # number of variables with borderline imbalance (0.1 < SMD <= 0.2)
-  smd.over.0.2 = colSums(smd.compare > 0.2)[c("mahalanobis", "ps.glm", "ps.rf")], # number of variables with clear imbalance (SMD > 0.2)
-  worst.smd   = round(apply(smd.compare, 2, max)[c("mahalanobis", "ps.glm", "ps.rf")], 3))
-print(effects, digits = 4, row.names = FALSE)
+  OR.adjusted = exp(c(coef(gmodel2)["treatment.swang"], coef(gmodel4)["treatment.swang"], coef(gmodel6)["treatment.swang"])))
+#print(effects, digits = 4, row.names = FALSE)
 
 
-
-
+# Next, for the neural network:
+print("For the NN:")
 y_trt.nn <- matched_nn$outcome.died[matched_nn$treatment.swang == 1]
 y_con.nn <- matched_nn$outcome.died[matched_nn$treatment.swang == 0]
 
@@ -997,8 +1196,10 @@ t.test(y_trt.nn - y_con.nn)
 mcnemar.test(table(y_trt.nn, y_con.nn))
 
 gmodel7 <- glm(outcome.died ~ treatment.swang, family = binomial, data = matched_nn)
-worst.nn <- rownames(smd_values_matched_nn)[which.max(smd_values_matched_nn)]
+summary(gmodel7)
+worst.nn <- nn.row$worst.var
 gmodel8 <- glm(as.formula(paste("outcome.died ~ treatment.swang +", worst.nn)), family = binomial, data = matched_nn)
+summary(gmodel8)
 
 sprintf("OR (unadjusted): %.4f", exp(coef(gmodel7)["treatment.swang"]))
 sprintf("OR (adjusted for %s): %.4f", worst.nn, exp(coef(gmodel8)["treatment.swang"]))
@@ -1008,66 +1209,154 @@ effects <- rbind(effects, data.frame(
   pairs        = length(psmatch.nn$index.treated),
   mean.diff    = mean(y_trt.nn - y_con.nn),
   OR           = exp(coef(gmodel7)["treatment.swang"]),
-  OR.adjusted  = exp(coef(gmodel8)["treatment.swang"]),
-  smd.0.1.to.0.2 = sum(smd_values_matched_nn > 0.1 & smd_values_matched_nn <= 0.2),
-  smd.over.0.2 = sum(smd_values_matched_nn > 0.2),
-  worst.smd    = round(max(smd_values_matched_nn), 3)))
+  OR.adjusted  = exp(coef(gmodel8)["treatment.swang"])))
+#print(effects, digits = 4, row.names = FALSE)
+
+#Lastly, for the CPBS model:
+print("For the CBPS:")
+y_trt.cbps <- matched_cbps$outcome.died[matched_cbps$treatment.swang == 1]
+y_con.cbps <- matched_cbps$outcome.died[matched_cbps$treatment.swang == 0]
+
+t.test(y_trt.cbps - y_con.cbps)
+mcnemar.test(table(y_trt.cbps, y_con.cbps))
+
+gmodel9 <- glm(outcome.died ~ treatment.swang, family = binomial, data = matched_cbps)
+summary(gmodel9)
+worst.cbps <- rownames(smd_values_matched_cbps)[which.max(smd_values_matched_cbps)]
+gmodel10 <- glm(as.formula(paste("outcome.died ~ treatment.swang +", worst.cbps)), family = binomial, data = matched_cbps)
+summary(gmodel10)
+
+sprintf("OR (unadjusted): %.4f", exp(coef(gmodel9)["treatment.swang"]))
+sprintf("OR (adjusted for %s): %.4f", worst.cbps, exp(coef(gmodel10)["treatment.swang"]))
+
+effects <- rbind(effects, data.frame(
+  method       = "CBPS",
+  pairs        = length(psmatch.cbps$index.treated),
+  mean.diff    = mean(y_trt.cbps - y_con.cbps),
+  OR           = exp(coef(gmodel9)["treatment.swang"]),
+  OR.adjusted  = exp(coef(gmodel10)["treatment.swang"])))
 print(effects, digits = 4, row.names = FALSE)
+
+
 print("===================================================")
 ```
-So what does this mountain of numbers and graphs tell us? Let's break it down - The overlap is good, with the centre around 0.4, both groups covering 0.05 to about 0.85, with the forest not producing any scores near 1. The caliper keeps 1672 out of our 2184 treated patients, which is 62 fewer than the glm (TODO: #any conclusion about this?). The balance is similarly good, but not exceptional, no variable above SMD 0.2, 38 of 40 below 0.1, with only malighx (0.113) and pot1 (0.107) borderline (#TODO, compare to glm pscore, i think had everything below 0.1? should we compare mean smd score?). 
-On the whole it beats the distance matching but lags a bit behind the glm. The effect points the same way as before but is smaller: mean difference 0.038 (t-test p = 0.021), McNemar p = 0.023 with 406 discordant pairs where the treated patient died against 343 where the control died, OR 1.18 (p = 0.022) versus 1.31 for the glm and 1.48 for Mahalanobis. Our preference is therefore the glm propensity score: it balanced every variable, kept more pairs, needed no tuning or clipping (#TODO: why?), did not move under adjustment, and is readable. The forest did not confirm our hypothesis that a threshold-based model would balance better, but it earns its place as a robustness check: a model with no additivity assumption, matched by the same protocol, still finds higher mortality among treated patients, so the RHC result does not depend on the form of the logistic model (#TODO love this). Mahalanobis matching is the clear loser, with the most residual imbalance (#TODO what do you mean with this) and the estimate that shifted most under adjustment #TODO and worst balance/SMD scores? or is that residual imbalance?.
+For the RF model, the p-value values are all significant: for the t-test 0.0411, the McNemar test 0.04489, and the coefficient of the glm model has a significance value of 0.0398 and results in an odds ratio for treatment: 1.1632. After explicitly adjust for the highest SMD variable (Cirrhosis), the coefficient p-value actually decreased to 0.02805, and the odds ratio rises to 1.1757. For the NN model, the effect seems to be even stronger in all tests: the p-value for the t-test is 0.000416, for the McNemar test 0.000483, and the coefficient of the glm model has a significance value of 0.000324 and results in an odds ratio for treatment: 1.2929. After explicitly adjust for the highest SMD variable (wtkilo1), the coefficient p-value actually decreased to 0.000206, and the odds ratio again rises slightly to 1.3047. Lastly, for the CBPS model the treatment effects become even stronger: the p-value for the t-test is 4.184e-05, for the McNemar test 5.048e-05, and the coefficient of the glm model has a significance value of 4.36e-05  and results in an odds ratio for treatment: 1.3390. After explicitly adjust for the highest SMD variable (wtkilo1), the coefficient p-value is 8.35e-05, and the odds ratio again rises slightly to 1.3260. Comparing this to the original GLM propensity model, we see that the NN and CBPS obtain similar effect results, and also obtain similar mean difference results (close to the glm's approximate 0.06). The RF shows the mean difference lower at 0.03. However, all models still agree that there is significant evidence that treatment does affect outcome, and in fact the chance of dying increases with RHC treatment. Since the 4 propensity-based models balanced the data similarly well, we place roughly equal amounts of trust in their results. However, since we chose the original GLM-based propensity method as our preferred, conditional on our selected covariates capturing the relevant confounding, the glm-propensity-matched result is our best estimate, because it achieved the (marginally) best-balanced comparison among the methods we tested. Notably, the forest did not confirm our hypothesis that a threshold-based model would balance better, but it and all the other models do earn their place as a robustness check: they all still find higher mortality among treated patients, so the RHC result does not depend on the form of the logistic model Mahalanobis matching is the clear loser, with the most group imbalance and the estimate that shifted most under adjustment.
 
 
-# Here we need to do point 6. Do correlation analysis between propensity scores of the 4 methods. There is some code from before below but it is NOT complete yet. maybe some other statistical test to check correlation between the 4 different sets of propensity scores can be used, or 4x3=12 different cross tests, im not sure.
+# Next, since the 4 propensity models balance similarly well, we want to try and dive a little bit deeper into why this is the case. Do they balance similarly well because they converge on the same distribution of propensity scores? Or do they each get different propensity scores but do the different scores happen to balance simiarly well. As stated at the start, we have no real interest in the propensity scores themselves, only their usage as a balancing tool, so probing this can help us understand the balancing mechanism better. 
 ```{r}
-sprintf("Correlation between glm and random forest propensity scores: %.3f", cor(pscore, oob.pscore.rf))
-sprintf("Correlation with glm propensity scores: %.3f", cor(pscore, pscore.nn))
-sprintf("Correlation with RF propensity scores: %.3f", cor(oob.pscore.rf, pscore.nn))
+pscores.df <- data.frame(
+  glm  = pscore,
+  rf   = pscore.rf,
+  nn   = pscore.nn,
+  cbps = pscore.cbps
+)
+cor.matrix.pearson <- cor(pscores.df) #Perform Pearson (linear) correlation
+cor.matrix.spearman <- cor(pscores.df, method = "spearman") #Perform Spearman (rank) correlation to check for relative ordering and not just numeric scale.
+
+print(cor.matrix.pearson)
+print(cor.matrix.spearman)
+
+corrplot(cor.matrix.pearson, method = "color", type = "upper", addCoef.col = "black",
+         title = "Pearson correlation between propensity scores across methods", mar = c(0,0,1,0))
+
+corrplot(cor.matrix.spearman, method = "color", type = "upper", addCoef.col = "black",
+         title = "Spearman correlation between propensity scores across methods", mar = c(0,0,1,0))
+
 ```
-Finally, the forest's propensity scores correlate at 0.82 with those from the logistic regression. This means the two models largely agree on who was likely to be treated, which is reassuring, but they are not identical (TODO: inspect where they are different/same? like which patients the scores are more/less similar and if those patients share attributes?), so there is room for the forest's threshold-based view of the data to make a difference (#TODO what does that mean?). Whether it does is a matter of balance, so now we continue the analysis on the RF model with node size = 10, since that was the best performing model, exactly as we did on the glm model.
+These correlation results reveal a clear pattern: the glm, NN, and CBPS propensity scores are all very highly correlated with each other (Pearson/Spearman both approximately 0.98–0.99), while RF stands notably apart, correlating with the other three at only 0.83–0.84. Note that both Pearson and Spearman agree with each other everywhere, so this isn't a scale-vs-ranking artifact, rather the RF genuinely ranks patients differently compared to the other models, not just on a different numeric scale. Importantly, this is consistent with our earlier reasoning about the models their functional forms: glm, NN, and CBPS all model treatment as some smooth, additive function of the covariates, while RF's completely different threshold-based, interaction-capturing splits produce a very different picture of who's likely treated. This divergence here is in correspondance with RF's comparatively worse SMD performance throughout our analysis; the model that thinks differently about the data is also the one that balances covariates least well, suggesting its threshold-based reasoning, whatever its clinical plausibility, isn't capturing the confounding structure as effectively as the smoother models are.
+
 
 
 ## Variable importance
 
-The glm and the forest agree fairly well on who gets treated, but do they agree on why? For the glm we cannot simply compare the raw coefficients, because a coefficient is per unit of its variable (one year of age versus one point of APACHE score versus a 0/1 indicator), so instead we use the absolute z-value (coefficient divided by its standard error), which is scale-free and is exactly what the p-value in summary(psmodel) is based on. For the forest we use the mean decrease in Gini impurity, i.e. how much splitting on a variable improved the purity of the treated/untreated mix, summed over every split in every tree. The two measures are on completely different scales, so we compare ranks rather than values.
+To further probe this interesting difference in propensity value prediction strategies, we want to find out why and how each approach determines who gets treated. To do this, we will compare the variable importance of the GLM (our preferred model) and RF propensity prediction models.
+
+For the glm we cannot simply compare the raw coefficients, because a coefficient is per unit of its variable (one year of age versus one point of APACHE score versus a 0/1 indicator), so instead we use the absolute z-value (coefficient divided by its standard error), which is scale-free and is exactly what the p-value in summary(psmodel) is based on. For the forest we use both the mean decrease in Gini impurity, i.e. how much splitting on a variable improved the purity of the treated/untreated mix, summed over every split in every tree, and the permutation importance which randomly permutes the values of a variables (removing any statisticaly relationship with the outcome) and then computes the decrease in accuracy. We do this because one caveat has to be kept in mind is that Gini importance is biased towards continuous variables, because a variable like meanbp1 or age offers a tree hundreds of candidate cutoffs whereas a 0/1 indicator like dnr1 offers exactly one, so the continuous variable has more possibilities to create an optimal split (and therefore be important), so the forest will naturally rank the continuous physiological measurements above the binary history and category variables. Lastly, since the two measures are on completely different scales, so we compare ranks rather than values.
 
 ```{r}
-glm.abs.z <- abs(summary(psmodel)$coefficients[-1, "z value"]) # [-1] drops the intercept
-rf.gini   <- importance(rf.model)[, "MeanDecreaseGini"]
+print("===================================================")
+set.seed(42)
+glm.abs.z <- abs(summary(psmodel)$coefficients[-1, "z value"])  # [-1] drops the intercept
+imp.all   <- importance(rf.model)
+rf.gini   <- imp.all[, "MeanDecreaseGini"]
+rf.perm   <- imp.all[, "MeanDecreaseAccuracy"]
 
-importance.comparison <- data.frame(glm.abs.z = round(glm.abs.z[xvars], 2),
-                                    rf.gini   = round(rf.gini[xvars], 1))
-importance.comparison$glm.rank <- rank(-importance.comparison$glm.abs.z) # rank 1 = most important
-importance.comparison$rf.rank  <- rank(-importance.comparison$rf.gini)
-print(importance.comparison[order(importance.comparison$rf.rank), ])
+importance.comparison <- data.frame(
+  glm.abs.z = round(glm.abs.z[xvars], 2),
+  rf.gini   = round(rf.gini[xvars], 1),
+  rf.perm   = round(rf.perm[xvars], 2)
+)
 
-sprintf("Spearman rank correlation between glm and random forest importance: %.2f",
+importance.comparison$glm.rank      <- rank(-importance.comparison$glm.abs.z)  # rank 1 = most important
+importance.comparison$rf.gini.rank  <- rank(-importance.comparison$rf.gini)
+importance.comparison$rf.perm.rank  <- rank(-importance.comparison$rf.perm)
+
+print(importance.comparison[order(importance.comparison$rf.gini.rank), ])
+
+sprintf("Spearman correlation, glm vs RF Gini: %.2f",
         cor(importance.comparison$glm.abs.z, importance.comparison$rf.gini, method = "spearman"))
-varImpPlot(rf.model, n.var = 15, main = "Random forest variable importance (top 15)")
-```
+sprintf("Spearman correlation, glm vs RF permutation: %.2f",
+        cor(importance.comparison$glm.abs.z, importance.comparison$rf.perm, method = "spearman"))
+sprintf("Spearman correlation, RF Gini vs RF permutation: %.2f",
+        cor(importance.comparison$rf.gini, importance.comparison$rf.perm, method = "spearman"))
 
-The rank correlation tells us to what degree the two models look at the same variables: a value near 1 would mean they weigh the covariates in the same order, a value near 0 that they have found different stories in the data. The rows where the ranks diverge the most are the interesting ones. One caveat has to be kept in mind before reading too much into them: Gini importance is biased towards continuous variables, because a variable like meanbp1 or age offers a tree hundreds of candidate cutoffs whereas a 0/1 indicator like dnr1 offers exactly one, so the forest will naturally rank the continuous physiological measurements above the binary history and category variables even when they carry comparable information. A variable that the forest ranks high but the glm ranks low, and that is not simply continuous, is therefore the best candidate for a threshold or interaction effect that the additive glm cannot express. Since the balance after matching was nonetheless slightly better for the glm, whatever extra structure the forest picked up did not translate into a better propensity score, which is the same conclusion as before seen from the other side.
+varImpPlot(rf.model, n.var = 15, type = 1,
+           main = "Random forest permutation importance (top 15)", cex = 0.6)
+varImpPlot(rf.model, n.var = 15, type = 2,
+           main = "Random forest Gini importance (top 15)", cex = 0.6)
+
+print("===================================================")
+```
+The rank correlation tells us to what degree the two models look at the same variables: a value near 1 would mean they weigh the covariates in the same order as predictor, a value near 0 that their is no monotonic relationship between the ordering of the importance of the variables: knowing how important a variable is to glm gives you no information about how important it is to RF (and vice versa). A variable that the forest ranks high but the glm ranks low, and that is not simply continuous, is therefore the best candidate for a threshold or interaction effect that the additive glm cannot express. Since the balance after matching was nonetheless better for the GLM, whatever extra structure the forest picked up did not translate into a better propensity score, which is the same conclusion as before seen from the other side. 
+In the results we can actually see a very interesting pattern. There are a few stand out disagreements (e.g. rea1 (creatinine): glm rank 30 (barely significant, z=1.11) vs. RF rank 3 (one of its top variables)) and a lot of moderate disagreements (e.g age: glm rank 38 (z=0.44, essentially not significant) vs. RF rank 6), resulting in a Spearman ranking correlation of only 0.14 for Gini and 0.33 for correlation. It initially sounds quite surprising that there is practically no correlation between the variable importance ranks, even though the propensity scores correlate at the much more significant 0.83. However, when looking closer we can see that the models agree on a small set of dominant predictors. For example, meanbp1 and aps1 both being in the top 1-3, having large z of approx. 8). These few dominant predictor dominate the predictions, which is enough to drive fairly high score correlation. Why certain variables are important for the RF model but not for the GLM (e.g. crea1 and age), can be because those variables do not correlate linearly with treatment, but once included in non-linar interactions or splits/thresholds, they can indeed become important. Lastly, it is notable that their is only a Spearman correlation of 0.61 between the RF Gini ranking and RF permutation ranking, indicating that the Gini importance was partly inflating the apparent RF/glm disagreement, likely due to its known bias toward continuous variables with many split points (as explained earlier). Once you switch to the less-biased permutation measure, RF and glm's importance rankings converge somewhat, though still far from strong agreement (0.33 is still weak).
+
+#Partial dependence plot
+To investigate why RF and glm disagreed sharply on dominant predictors for RF like crea1 and age (high RF importance, near-zero glm significance), we plotted partial dependence curves for both variables to try and probe/interpret the RF's model structure. This holds all other covariates at their observed values while sweeping the variable in questions across a range of values, and averaging each model's predicted propensity score. Both variables show visible nonlinear and threshold/step behavior in the RF, not the smooth trend a linear glm term would produce — confirming RF is genuinely capturing nonlinear structure the glm cannot express.
+This is a nice nuance on our earlier finding that RF balanced worse than GLM despite this hypothesis. RF's threshold behavior is real, it just didn't help matching. This is likely because it also produced a rougher, more separated score distribution (consistent with RF's higher extreme-score counts and less correlated scores we saw before). So the intial "RF should balance better because it thinks like a clinician" hypothesis was right about the mechanism, but wrong about the practical payoff, which is a more interesting result, since it separates whether a model captures the expected structure from whether that structure helps the specific task of matching.
+
+```{r}
+par(mfrow = c(1, 2))
+
+partialPlot(rf.model, pred.data = rf.data, x.var = "crea1",
+            main = "Partial dependence: crea1", xlab = "Creatinine (crea1)", ylab = "logit(P(treated))")
+
+partialPlot(rf.model, pred.data = rf.data, x.var = "age",
+            main = "Partial dependence: age", xlab = "Age", ylab = "logit(P(treated))")
+
+par(mfrow = c(1, 1))
+```
 
 
 ## Caliper width
 
-Throughout the assignment we matched with a caliper of 0.2 standard deviations of the logit of the propensity score, which is the width recommended by Austin (2011), but we never checked whether that choice mattered. The caliper is the knob that sets the bias-variance tradeoff of matching directly: a narrow caliper only accepts close matches, so the matched groups are well balanced (low bias), but more treated patients are left without a match, so the estimate is based on fewer pairs (high variance) and, more subtly, on a different group of patients than the full treated population. A wide caliper keeps nearly all treated patients but accepts poorer matches, so the imbalance creeps back in. Below we repeat the matching for a range of calipers, for both the glm and the random forest propensity score, and record the number of pairs, the balance and the resulting effect estimate.
+Throughout the assignment we matched with a caliper of 0.2 standard deviations of the logit of the propensity score, which is the width recommended by Austin (2011), but we never checked whether that choice mattered, it was simply given to us by the instructors. The caliper is the knob that sets the bias-variance tradeoff of matching directly: a narrow caliper only accepts close matches, so the matched groups are well balanced (low bias), but more treated patients are left without a match, so the outcome effect estimate is based on fewer pairs (high variance) and, more subtly, on a different group of patients than the full treated population, as explained before. On the other hand, a wide caliper keeps nearly all treated patients but accepts poorer matches, so the imbalance creeps back in. Below we repeat the matching for a range of calipers, for all four propensity score models, and record the number of pairs, the balance and the resulting effect estimate given as the odds ratio from the GLM coefficient. Later, we perform a similar analysis for the greedy matching approach, but we do this seperately since it lives on an entirely different caliper scale as it is in 40D rather than 1D. 
 
 ```{r}
-calipers <- c(0.05, 0.1, 0.2, 0.5, 1, 2)
-logits.rf <- logit(pmin(pmax(oob.pscore.rf, 0.005), 0.995)) # clipped as before
+calipers <- c(0.05, 0.1, 0.2, 0.5, 0.75, 1, 2)
+logits.rf   <- logit(pmin(pmax(pscore.rf, 0.005), 0.995))
+logits.nn   <- logit(pmin(pmax(pscore.nn, 0.005), 0.995))
+logits.cbps <- logit(pmin(pmax(pscore.cbps, 0.005), 0.995))
+
 caliper.comparison <- data.frame()
 
 for (cal in calipers) {
-  for (model in c("glm", "rf")) {
+  for (model in c("glm", "rf", "nn", "cbps")) {
+    X.model <- switch(model,
+                       glm  = logits,
+                       rf   = logits.rf,
+                       nn   = logits.nn,
+                       cbps = logits.cbps)
     set.seed(42)
-    mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = if (model == "glm") logits else logits.rf,
+    mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = X.model,
                 replace = FALSE, Weight = 2, caliper = cal)
     md  <- rhc.selected[unlist(mt[c("index.treated", "index.control")]), ]
     smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE))
     y.t <- md$outcome.died[md$treatment.swang == 1]
     y.c <- md$outcome.died[md$treatment.swang == 0]
+    
+    gmodel.cal <- glm(outcome.died ~ treatment.swang, family = binomial, data = md)
+    coef.summary <- summary(gmodel.cal)$coefficients
 
     caliper.comparison <- rbind(caliper.comparison, data.frame(
       model          = model,
@@ -1076,55 +1365,111 @@ for (cal in calipers) {
       max.smd        = round(max(smd), 3),
       n.smd.over.0.1 = sum(smd > 0.1),
       mean.diff      = round(mean(y.t - y.c), 3),
-      OR             = round(exp(coef(glm(outcome.died ~ treatment.swang, family = binomial, data = md))["treatment.swang"]), 3)))
+      OR             = round(exp(coef.summary["treatment.swang", "Estimate"]), 3),
+      p.value        = signif(coef.summary["treatment.swang", "Pr(>|z|)"], 3)))
   }
 }
 print(caliper.comparison, row.names = FALSE)
 
-# Variance side of the tradeoff: how many pairs survive each caliper
 ggplot(caliper.comparison, aes(x = caliper, y = matched.pairs, colour = model)) +
   geom_line() + geom_point() + scale_x_log10() +
   labs(x = "caliper (SD of logit PS, log scale)", y = "matched pairs", title = "Matched pairs kept vs caliper width") +
   theme_minimal()
 
-# Bias side of the tradeoff: how far the worst variable drifts out of balance
 ggplot(caliper.comparison, aes(x = caliper, y = max.smd, colour = model)) +
   geom_line() + geom_point() + scale_x_log10() +
   geom_hline(yintercept = 0.1, linetype = "dashed") +
   labs(x = "caliper (SD of logit PS, log scale)", y = "max SMD", title = "Worst-variable SMD vs caliper width") +
   theme_minimal()
 ```
-
-The two plots are the bias-variance tradeoff drawn out: the number of pairs rises with the caliper while the maximum SMD rises with it too, and the question is where the curves cross the point of diminishing returns. The sensible choice is the widest caliper that still keeps every variable under the dashed 0.1 line, since beyond that we are buying pairs with imbalance, and before that we are throwing away pairs without gaining balance. The effect estimates in the table are the practical check: if the odds ratio wanders as the caliper changes, the conclusion depends on a tuning choice, which is a warning sign, whereas a stable odds ratio across the reasonable range means the result is robust to it. Comparing the two models on the same grid shows whether the caliper interacts with the propensity model: the forest's scores are coarser (a fraction of 500 votes rather than a smooth probability), so the same caliper covers a different number of candidate controls than for the glm, and the forest therefore tends to lose pairs faster as the caliper narrows.
-
+The two plots are the bias-variance tradeoff drawn out: the number of pairs rises with the caliper while the maximum SMD rises with it too, and the question is where the curves cross the point of diminishing returns. The sensible choice is the widest caliper that still keeps every variable under the dashed 0.1 line, since beyond that we are getting pairs with significant imbalance, and before that we are throwing away pairs without gaining much balance as the max-SMD plot is essentially flat for the first half. Notably, we see that the random forest model has a worse max SMD score and drops pairs faster throughout, highlighting its worse balancing performance as we demonstrated earlier. For the other three models, the optimal caliper seems to be around 0.75, which actually would have increased the number of matched pairs by around 200 for those models, significantly increasing the sample size to allow for smaller confidence intervals, less noisy estimates and more power to detect a real effect. Notably, in the results table we see that at this larger sample size the p-values are all still significant (5.65e-04 vs. 2.81e-02 vs. 1.16e-03 vs. 2.45e-05) and the odds ratios still indicate that the chance of dying increases with treatment (OR 1.266 vs. 1.166 vs. 1.247 vs. 1.334) for the GLM vs. RF vs. NN vs. CBPS. respectively.
 
 
-#Do Partial dependence plots and IPW on friday only if we have time.
+Regarding the greedy matching with the Mahalanobis distance; we already observed that it obtains 0 matches using a caliper due to the matching happening in 40D. Moreover, it is interpreted as the variation in each covariate in standardized units of that covariate, rather than the variation in the logit of a predicted scalar - the caliper means very different things in each of the cases. As a result, the caliper range needsa completely different variation scale and shouldn't be compared directly with the other calipers, which is why we gave it it's own brief analysis here. 
+```{r}
+calipers.maha <- c(0.5, 1, 2, 5, 10, 20)  # far larger, since caliper applies per-covariate across 40 dimensions
+maha.comparison <- data.frame()
+
+for (cal in calipers.maha) {
+  set.seed(42)
+  mt <- Match(Tr = rhc.selected$treatment.swang, M = 1, X = as.matrix(rhc.selected[xvars]),
+              replace = FALSE, Weight = 2, caliper = cal)
+  
+  if (!is.list(mt) || is.null(mt$index.treated)) {
+    maha.comparison <- rbind(maha.comparison, data.frame(
+      caliper = cal, matched.pairs = 0, max.smd = NA, n.smd.over.0.1 = NA, mean.diff = NA, OR = NA))
+    next
+  }
+  
+  md  <- rhc.selected[unlist(mt[c("index.treated", "index.control")]), ]
+  smd <- ExtractSmd(CreateTableOne(vars = xvars, strata = "treatment.swang", data = md, test = FALSE))
+  y.t <- md$outcome.died[md$treatment.swang == 1]
+  y.c <- md$outcome.died[md$treatment.swang == 0]
+  
+  gmodel.cal <- glm(outcome.died ~ treatment.swang, family = binomial, data = md)
+  coef.summary <- summary(gmodel.cal)$coefficients
+
+  maha.comparison <- rbind(maha.comparison, data.frame(
+    caliper        = cal,
+    matched.pairs  = length(mt$index.treated),
+    max.smd        = round(max(smd), 3),
+    n.smd.over.0.1 = sum(smd > 0.1),
+    mean.diff      = round(mean(y.t - y.c), 3),
+    OR             = round(exp(coef.summary["treatment.swang", "Estimate"]), 3),
+    p.value        = signif(coef.summary["treatment.swang", "Pr(>|z|)"], 3)))
+}
+print(maha.comparison, row.names = FALSE)
+```
+In the results table above, we can see a few interesting results. First, we see that as the caliper is increased significantly, in range of 5+, we do get a significant amount of matches, meaning that in that case most treated patients do find at least 1 (unmatched) control where each of the 40 variables differ by no more than 5 standardized units. Notably, the p-values here also get small (in the range of e-10), and the odds ratio indicates, again, a positive result (death chances increase with treatment), though the OR is a lot larger than before: approximately 1.5 here whereas the other model were in the range of 1.1-1.3. However, we also observe that the number of variables with SMD above 0.1 is still 16 (which is more than at smaller calipers since the matches allowed are worse, per the bias-variance tradeoff discussed above), and the max smd stays around 0.5, which raises significant concerns regarding confounding. Considering this, even at higher calipers, getting larger amounts of matches, we still prefer the other models as the balancing of the covariates between the two groups is significantly better for those methods, allowing us to place significantly more trust in our obtained results.
+
+# Inverse probability weighting (IPW)
+Throughout this entire report, we simply assumed the matching strategy given to us at the start. However, maybe this is not the optimal strategy to use and do other strategies achieve better or similar balancing quality, while preserving more matched pairs. As such, as a last experiment, we try out an alternative to matching: inverse probability weighting. Here, all treated observations get a weight of 1, while the untreated observations get weighted by their odds of being treated (odds of the propensity score). Thus, untreated patients who look very likely to be treated are upweighted, since they are likely rare among the untreated, while untreated patients which don't look like treated pateints get downweighted, since they are common among this group. As a result, the weighted distribution of covariates of the untreated group is reshaped to look very similar to that of the treated group, (hopefully) achieving balancing of each covariates, the same result that matching tries to achieve. Then, all patients are used in a weighted manner in the downstream outcome effect analysis. This allows us to isolate and compare each model's own balancing quality, without relying on the matching step to drop bad quality matches. 
+```{r}
+compute_att_weights <- function(ps, treatment) {
+  ifelse(treatment == 1, 1, ps / (1 - ps))
+}
+
+pscores.list <- list(
+  glm  = pscore,
+  rf   = pscore.rf,
+  nn   = pscore.nn,
+  cbps = pscore.cbps
+)
+
+ipw.comparison <- data.frame()
+
+for (name in names(pscores.list)) {
+  ps.c <- pmin(pmax(pscores.list[[name]], 0.005), 0.995)
+  w <- compute_att_weights(ps.c, rhc.selected$treatment.swang)
+  
+  design.w <- svydesign(ids = ~1, data = rhc.selected[, c(xvars, "treatment.swang", "outcome.died")], weights = ~w)
+  
+  # Balance check as before
+  tab.weighted <- svyCreateTableOne(vars = xvars, strata = "treatment.swang", data = design.w, test = FALSE)
+  smd.weighted <- ExtractSmd(tab.weighted)
+  
+  # Test treatment effect on outcome, using the same weights design
+  m <- svyglm(outcome.died ~ treatment.swang, family = quasibinomial, design = design.w)
+  cf <- summary(m)$coefficients
+  
+  ipw.comparison <- rbind(ipw.comparison, data.frame(
+    model           = name,
+    max.smd         = round(max(smd.weighted), 3),
+    n.smd.under.0.1 = sum(smd.weighted < 0.1),
+    n.smd.0.1.0.2   = sum(smd.weighted >= 0.1 & smd.weighted < 0.2),
+    n.smd.over.0.2  = sum(smd.weighted > 0.2),
+    max.weight      = round(max(w), 1),
+    OR              = round(exp(cf["treatment.swang", "Estimate"]), 3),
+    p.value         = signif(cf["treatment.swang", "Pr(>|t|)"], 3)))
+}
+print(ipw.comparison, row.names = FALSE)
+```
+In these results we observe similar trends as before. Notably, the balancing of RF is, again, the worst with a max smd = 0.11 and 2 variables over 0.1. The other methods perform similar, however the glm propensity prediction model does seem to fall behind a bit with a max smd = 0.1 and 1 variables over 0.1, whereas with regular matching its max smd was only 0.035 (and thus 0 variables over 0.1). This might suggest that that model was helped relatively a lot by the matching step disposing of bad untreated patients. Moreover, here the p-values are also all significant and comparable to the ones obtained with matching, the same for the odds ratios. 
+However, as a general approach matching does seem to be preferable over IPW, since it does lead to better matching and does not reduce the power of the outcome analysis significantly, as we just compared. 
 
 
-# Add a final conclusion paragraph about if we prefer a certain model, or major conclusions we can draw.
-
-
-
-#Okay to do gameplan so it's clear:
-1. check what covariate balancing propensity score form imai& ratkovic 2014 is about. can we use it? CHECK, sounds great so let's use it!
-2. Tune hyperparams based on the best balance(e.g. lowest max SMD/fewest variables over 0.1) since that is in the end what we care about, not the propensity prediction accuracy. 
-3. do the t-test/mcnemar test/ glm test to see if treatment explains outcome in each of the three models and compare p-values etc. like in closed part roughly.
-
-4. DONE (see "Variable importance" section above). Variable importance analysis. For GLM (coefficient magnitudes/p-values), RF (important() and varImpPlot(), read claude about it.) (and if possible to some extent NN), do the two models agree on which variables matter most for predicting treatment? If they diverge substantially, that's an interesting, reportable finding (e.g., maybe the forest picks up a variable that's important only in combination with others — nonlinear/interaction effects — that the additive glm can't see)
-5. DONE (see "Caliper width" section above). Caliper threshold analysis, show bias/variance tradeoff
-
-6. Do correlation analysis between propensity scores of the 4 methods? Not completely sure what this brings us but if we can make a nice story around it I think it's good to add. 
-
-7. Partial dependence plots. Do this for GLM vs RF vs NN. How it's calculated: to see how the model's predicted P(treatment) depends on one variable (say, age), you take the entire dataset, artificially set every patient's age to a fixed value (e.g., age=50), get the forest's predicted probability for everyone under that assumption, and average those predictions. Repeat across a grid of age values (e.g., 20, 30, 40, ... 90) — the resulting curve shows how average predicted treatment probability moves as age moves, holding the "effect" of all other variables fixed at their observed values (each prediction still uses each patient's true values for everything else — only the one variable of interest is swept). In R: randomForest::partialPlot(rf.model, pred.data=rf.data, x.var="age").
-
-What you learn: whether the relationship looks smooth/monotonic (similar to what a linear/logistic term would capture) or shows a sharp jump/plateau at some threshold (the "clinical cutoff" behavior your team hypothesized trees might capture that a glm's additive linear term cannot).
-
-What I meant by "even though the matching/balance results didn't confirm it" / "negative result": your team's original hypothesis was: because RF thinks in thresholds like clinicians do, it should produce a better propensity score — and "better" was operationalized as better balance after matching (lower SMD, less extreme scores). That didn't pan out — the glm actually balanced better in your existing results. That's the "negative result" for the practical hypothesis. But that doesn't mean the underlying premise (RF captures threshold effects, glm doesn't) is false — it just means capturing threshold effects didn't translate into better matching performance in this case. A partial dependence plot could still show real threshold behavior in the forest even though it didn't help balance — which is actually a more interesting, nuanced finding than either "RF wins" or "RF loses": it separates "does the model behave the way we expected" from "does that behavior help for this specific downstream task," and reasoning explicitly about why a true modeling difference didn't yield a practical improvement is exactly the kind of critical thinking the TA is asking for.
-
-8. Test GLM, RF & NN on train AUC vs cross val AUC, to see if propensity prediction accuracy/generalization correlates to best-balance. like if best balanced model turns out to have a (slightly) overfitted propensity prediction model because it squished propensity values more towards the middle to create overlap (and thus not the best propensity prediction model we could get) then that's an interesting observation and worth noting.
-
-9. Use inverse probability weighting based on propensity scores as a second approach to matching.Can do if have time over. not necessary persé but would be a nice addition.
+# Final Conclusions
+In conclusion, after deep and thoughtful analysis of different propensity prediction models used for matching, including probing of various properties of them, and looking at an alternatives to the standard matching architecture we were given initially, we arrive at one most favourable approach. The intial GLM (logistic regression) propensity prediction model is the preferred model of choice as it: 1. produced the best overall balancing of each covariate across the treated and non-treated groups, and 2. it is the more simplistic and consequently interpretable model, as we can look at its standardized coefficients to directly get an accurate idea of the role each variable plays in its predictions, as opposed to, for example, the neural network whose weights are much more a blackbox. Moreover, we observed that matching with a slightly better caliper (approximately 0.75 standardized units) would allow for more matches, and consequently more power and less noisy estimates in the downstream outcome analysis, while hardly reducing the balancing is the best balancing approach, and preferred over direct inverse probability weighting. This preferred approach led to an odds ratio of 1.266 with a p-value of 5.65e-04, suggesting that their is enough evidence to conclude that RHC treatment increase the odds of dying, assuming the ignorability assumption holds.
 
 
 
