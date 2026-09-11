@@ -15,9 +15,6 @@ Please provide information about your group:
 ==> Student names: Kieran Carroll, Hugo Sokołowski-Katzer, Isa Oxenaar
 ==> Student numbers: 16503120, 1534349, xxx
 
-#TODO: names, student numbers and disclaimer that all em dashes used were human written haha. LLm usage disclose anywhere?
-*Note that the set.seed(42) is run in many cells, to ensure reproducibility of results even if cells are not run in order all the time.
-
 DISCLAIMER: AI such as Claude Opus 5 was used in the making of this assignment. The predominant use was idea brainstorming, debugging as well as R code syntax assistance. All analyses, interpretations of results, and written answers are our own work. AI tools were not used to generate the substantive content of our responses or conclusions.
 
 # Closed part (70% of the grade)
